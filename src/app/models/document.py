@@ -15,8 +15,8 @@ class Document(Base):
     
     # Datos extraídos - JSON para SQLite, JSONB para PostgreSQL
     raw_text = Column(Text, nullable=True)
-    # Usar JSON para SQLite (compatible), JSONB para PostgreSQL (avanzado)
-    extracted_data = Column(JSON, nullable=True)
+    # Usar JSONB para PostgreSQL (avanzado), JSON para SQLite
+    extracted_data = Column(JSONB, nullable=True)
     confidence_score = Column(Integer, nullable=True)
     
     # Metadatos de procesamiento

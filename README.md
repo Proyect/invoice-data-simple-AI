@@ -1,144 +1,164 @@
-# Document Extractor API - Invoice Data Simple AI 🚀
+# Document Extractor API
 
-Sistema completo de extracción de datos de facturas y documentos usando OCR y procesamiento inteligente.
+API optimizada para extraer datos de documentos usando **OCR híbrido**, **LLMs** y **procesamiento asíncrono**.
 
-## ⚡ Inicio Rápido con Docker (Recomendado)
+## 🚀 Inicio Rápido
 
-### **Paso 1: Construir imágenes**
+### Opción 1: Docker (Recomendado)
+
 ```bash
-docker-compose build
-```
-
-### **Paso 2: Iniciar servicios**
-```bash
+# 1. Construir e iniciar
 docker-compose up -d
-```
 
-### **Paso 3: Acceder a la aplicación**
-```
+# 2. Verificar
+curl http://localhost:8006/health
+
+# 3. Documentación
 http://localhost:8006/docs
 ```
 
-## 🌐 Puertos Configurados
+### Opción 2: Local
 
-| Servicio | Puerto | URL |
-|----------|--------|-----|
-| **API** | 8006 | http://localhost:8006 |
-| **Documentación** | 8006 | http://localhost:8006/docs |
-| **PostgreSQL** | 5433 | localhost:5433 |
-| **Redis** | 6380 | localhost:6380 |
-| **PgAdmin** | 5050 | http://localhost:5050 |
+```bash
+# 1. Activar entorno virtual
+.venv\Scripts\activate
 
-## 🎯 Características
+# 2. Iniciar servidor
+python start.py
 
-- ✅ **OCR automático** con Tesseract (incluido en Docker)
-- ✅ **Extracción inteligente** de datos de facturas
-- ✅ **Soporte para PDF** e imágenes (JPG, PNG)
-- ✅ **Base de datos PostgreSQL** con búsqueda full-text
-- ✅ **Cache con Redis** para mejor performance
-- ✅ **API REST** con FastAPI
-- ✅ **Documentación automática** con Swagger
-- ✅ **Procesamiento asíncrono** con workers
+# 3. Documentación
+http://localhost:8005/docs
+```
 
-## 📊 Datos que Extrae
+## 📋 Características
 
-De facturas argentinas:
-- Número de factura
-- Fecha de emisión
-- Emisor y receptor
-- CUIT/CUIL
-- Condición ante IVA
-- Items y productos
-- Montos (subtotal, IVA, total)
-- Emails y teléfonos
+- **OCR Híbrido**: Tesseract (gratis) + Google Vision + AWS Textract
+- **Extracción Inteligente**: Regex + spaCy + OpenAI GPT
+- **Base de Datos**: PostgreSQL + SQLite fallback
+- **Procesamiento Asíncrono**: Redis Queue + Workers
+- **Docker**: Despliegue completo incluido
 
-## 🚀 Uso
+## 🔧 Configuración
 
-### **Subir una factura**
+### Variables de Entorno (.env)
 
-**Interfaz web**:
-1. Abre http://localhost:8006/docs
-2. POST /api/v1/upload
-3. Sube tu factura PDF o imagen
-4. ¡Ve los datos extraídos automáticamente!
+```env
+# Base
+APP_NAME=Document Extractor API
+DEBUG=True
+PORT=8005
 
-**cURL**:
+# Base de datos
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/document_extractor
+
+# APIs Opcionales
+OPENAI_API_KEY=sk-...                    # Para extracción con LLM
+GOOGLE_APPLICATION_CREDENTIALS=...       # Para Google Vision OCR
+AWS_ACCESS_KEY_ID=...                    # Para AWS Textract
+AWS_SECRET_ACCESS_KEY=...
+```
+
+### Obtener API Keys
+
+#### OpenAI GPT (Recomendado para empezar)
+1. Ir a https://platform.openai.com/api-keys
+2. Crear nueva API key
+3. Agregar a `.env`: `OPENAI_API_KEY=sk-...`
+
+#### Google Cloud Vision (Opcional)
+1. Ir a https://console.cloud.google.com/
+2. Crear proyecto y habilitar Vision API
+3. Crear Service Account y descargar JSON
+4. Agregar a `.env`: `GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json`
+
+## 📊 Endpoints Principales
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/upload` | POST | Upload simple (Tesseract + spaCy) |
+| `/api/v1/upload-flexible` | POST | Upload con selección de métodos |
+| `/api/v1/documents` | GET | Listar documentos |
+| `/api/v1/documents/{id}` | GET | Obtener documento |
+| `/health` | GET | Health check |
+| `/docs` | GET | Documentación Swagger |
+
+## 🧪 Pruebas
+
+### Health Check
+```bash
+curl http://localhost:8006/health
+```
+
+### Subir Documento
 ```bash
 curl -X POST "http://localhost:8006/api/v1/upload" \
-  -F "file=@factura.pdf" \
+  -F "file=@documento.pdf" \
   -F "document_type=factura"
 ```
 
-### **Listar documentos procesados**
+### Verificar Tesseract
 ```bash
-curl http://localhost:8006/api/v1/documents
+curl http://localhost:8006/api/v1/upload/test
 ```
 
-### **Ver estadísticas**
-```bash
-curl http://localhost:8006/api/v1/documents/stats
-```
+## 🐳 Docker
 
-## 🛠️ Comandos Útiles
+### Servicios Incluidos
+- **app**: API principal (puerto 8006)
+- **postgres**: Base de datos (puerto 5434)
+- **redis**: Cache y colas (puerto 6380)
+- **worker**: Procesamiento asíncrono
+- **pgadmin**: Admin DB (puerto 5050)
 
+### Comandos Útiles
 ```bash
 # Ver logs
 docker-compose logs -f app
 
-# Reiniciar servicios
+# Reiniciar
 docker-compose restart
 
-# Detener todo
+# Detener
 docker-compose down
-
-# Ver estado
-docker-compose ps
-
-# Acceder al contenedor
-docker-compose exec app /bin/bash
 ```
 
-## 📚 Documentación Completa
+## 🔍 Troubleshooting
 
-- **`DOCKER-DEPLOYMENT.md`** - Guía completa de Docker
-- **`DOCKER-PUERTOS.md`** - Detalle de puertos
-- **`COMO-USAR-LA-API.md`** - Guía de uso de la API
-- **`doc/README.md`** - Documentación técnica completa
-
-## 🔧 Desarrollo Local (Alternativa)
-
-Si prefieres desarrollo local sin Docker:
-
+### Error: "relation documents does not exist"
 ```bash
-# Configurar entorno virtual
-setup_venv.bat
-
-# Iniciar aplicación
-.venv\Scripts\activate
-python start.py
+# Ejecutar migración
+alembic upgrade head
 ```
 
-**Nota**: Requiere instalar Tesseract y Poppler manualmente.
+### Error: "tesseract is not installed"
+- **Docker**: Ya incluido
+- **Local**: Instalar desde https://github.com/UB-Mannheim/tesseract/wiki
 
-## 🐛 Troubleshooting
-
-### **Puerto ya en uso**
+### Error: "spaCy model not found"
 ```bash
-# Cambiar puerto en docker-compose.yml
-ports:
-  - "8007:8005"  # Usar 8007 en lugar de 8006
+python -m spacy download es_core_news_sm
 ```
 
-### **Ver logs de errores**
-```bash
-docker-compose logs app
+## 📁 Estructura del Proyecto
+
+```
+src/app/
+├── main.py              # Aplicación FastAPI
+├── core/                # Configuración y DB
+├── models/              # Modelos SQLAlchemy
+├── routes/              # Endpoints API
+├── services/            # Lógica de negocio
+└── schemas/             # Esquemas Pydantic
 ```
 
-### **Reinicio limpio**
+## 🚀 Despliegue en Producción
+
 ```bash
-docker-compose down -v
-docker-compose build --no-cache
-docker-compose up -d
+# Usar configuración de producción
+docker-compose -f docker-compose.prod.yml up -d
+
+# Con Nginx y SSL
+docker-compose -f docker-compose.prod.yml --profile production up -d
 ```
 
 ## 📄 Licencia
@@ -147,9 +167,12 @@ MIT License
 
 ## 🤝 Contribuir
 
-Ver `DEVELOPMENT-WORKFLOW.md` para el flujo de desarrollo.
+1. Fork el proyecto
+2. Crear rama: `git checkout -b feature/nueva-funcionalidad`
+3. Commit: `git commit -m 'Agregar nueva funcionalidad'`
+4. Push: `git push origin feature/nueva-funcionalidad`
+5. Abrir Pull Request
 
 ---
 
-**¡Disfruta extrayendo datos de facturas automáticamente!** 🎉
-
+**¡Listo para extraer datos de documentos! 🎉**

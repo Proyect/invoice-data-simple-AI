@@ -79,7 +79,8 @@ class OptimalOCRService:
         """
         Extrae texto usando la estrategia óptima
         """
-        start_time = asyncio.get_event_loop().time()
+        import time
+        start_time = time.time()
         
         try:
             # Paso 1: Análisis rápido de complejidad
@@ -94,7 +95,8 @@ class OptimalOCRService:
             # Paso 4: Validar y mejorar resultado
             validated_result = await self._validate_and_improve(result, image_path)
             
-            processing_time = asyncio.get_event_loop().time() - start_time
+            import time
+            processing_time = time.time() - start_time
             validated_result.processing_time = processing_time
             
             return validated_result
@@ -157,7 +159,9 @@ class OptimalOCRService:
         """
         try:
             # Usar detección de contornos para estimar densidad de texto
-            contours, _ = cv2.findContours(gray_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # Compatible con OpenCV 3.x y 4.x
+            result = cv2.findContours(gray_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = result[0] if len(result) == 2 else result[1]
             
             total_contour_area = sum(cv2.contourArea(c) for c in contours)
             image_area = gray_image.shape[0] * gray_image.shape[1]
@@ -394,7 +398,8 @@ class OptimalOCRService:
     
     async def _fallback_tesseract(self, image_path: str, start_time: float) -> OCRResult:
         """Fallback a Tesseract en caso de error"""
+        import time
         result = await self._use_tesseract(image_path)
-        result.processing_time = asyncio.get_event_loop().time() - start_time
+        result.processing_time = time.time() - start_time
         result.metadata["fallback"] = True
         return result
