@@ -92,6 +92,19 @@ services:
     profiles:
       - dev
 
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:80"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - app-network
+
   # Nginx para producción (opcional)
   nginx:
     image: nginx:alpine
@@ -103,6 +116,7 @@ services:
       - ./ssl:/etc/nginx/ssl
     depends_on:
       - app
+      - frontend
     restart: unless-stopped
     networks:
       - app-network

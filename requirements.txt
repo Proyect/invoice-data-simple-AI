@@ -5,10 +5,10 @@ python-multipart==0.0.6
 
 # OCR y procesamiento de imágenes
 pytesseract==0.3.10
-pillow==10.1.0
+pillow>=10.0.0
 pdf2image==1.16.3
 opencv-python==4.8.1.78
-numpy==1.24.3
+numpy>=1.24.0
 
 # Cloud OCR APIs
 google-cloud-vision==3.4.4
@@ -28,7 +28,6 @@ alembic==1.13.1
 
 # Cache y procesamiento asíncrono
 redis==5.0.1
-aioredis==2.0.1
 rq==1.15.1
 
 # Utilidades
