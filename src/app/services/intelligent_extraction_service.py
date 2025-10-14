@@ -4,8 +4,6 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import openai
-from langchain import LLMChain, PromptTemplate
-from langchain.llms import OpenAI
 import re
 import spacy
 import json
@@ -43,14 +41,8 @@ class IntelligentExtractionService:
         else:
             logger.warning("OpenAI API key no configurada")
         
-        # Configurar LangChain
-        self.llm = None
-        if settings.OPENAI_API_KEY:
-            self.llm = OpenAI(
-                openai_api_key=settings.OPENAI_API_KEY,
-                temperature=settings.OPENAI_TEMPERATURE,
-                max_tokens=settings.OPENAI_MAX_TOKENS
-            )
+        # LangChain no es obligatorio para los tests; evitar importaciones pesadas
+        # Mantener lógica basada en OpenAI SDK oficial
         
         # Cargar spaCy (fallback)
         try:
@@ -127,6 +119,13 @@ class IntelligentExtractionService:
         """Detecta el tipo de documento"""
         text_upper = text.upper()
         
+        # Heurística directa robusta: si contiene palabras clave claras
+        if "FACTURA" in text_upper:
+            return DocumentType.FACTURA
+        if "RECIBO" in text_upper:
+            return DocumentType.RECIBO
+        
+        # Fallback a patrones configurados
         for doc_type, patterns in self.document_patterns.items():
             for pattern in patterns:
                 if re.search(pattern, text_upper):

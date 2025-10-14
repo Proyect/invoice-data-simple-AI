@@ -33,6 +33,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Responder preflight OPTIONS para rutas comunes (algunos servers lo requieren explícito)
+from fastapi import Response
+
+@app.options("/{full_path:path}")
+async def preflight(full_path: str):
+    # Responder con headers CORS explícitos
+    resp = Response(content="OK")
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "*"
+    return resp
+
 # Incluir rutas
 app.include_router(simple_upload.router, prefix="/api/v1", tags=["upload-simple"])
 app.include_router(flexible_upload.router, prefix="/api/v1", tags=["upload-flexible"])
