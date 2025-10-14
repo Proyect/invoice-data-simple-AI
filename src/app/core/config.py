@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     RQ_WORKER_TIMEOUT: int = 600  # 10 minutos
     RQ_QUEUE_NAME: str = "document_processing"
     
+    # Configuración de autenticación
+    SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    
+    # Configuración de rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_BURST: int = 10
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

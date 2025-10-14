@@ -4,7 +4,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import redis
-from rq import Queue, Worker, Connection
+from rq import Queue, Worker
+from rq import connections as rq_connections
 from rq.job import Job
 import json
 from app.core.config import settings
