@@ -115,6 +115,7 @@ logs/*
 *.swp
 *.swo
 *~
+.aux 
 
 # Docker
 .dockerignore
