@@ -7,23 +7,27 @@ python-multipart==0.0.6
 pytesseract==0.3.10
 pillow>=10.0.0
 pdf2image==1.16.3
-opencv-python==4.8.1.78
-numpy>=1.24.0
+opencv-python-headless==4.10.0.84
+numpy>=2.0.0
 
 # Cloud OCR APIs
 google-cloud-vision==3.4.4
 boto3==1.34.0
 
 # Procesamiento de lenguaje natural
-spacy==3.7.2
+spacy==3.8.7
 regex==2023.10.3
 openai==1.3.0
-langchain==0.0.340
-transformers==4.35.2
+# Pin httpx for Starlette TestClient compatibility
+httpx==0.27.2
+# transformers is optional for tests in this environment
+# transformers==4.35.2
 
 # Base de datos
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+sqlalchemy==2.0.36
+# PostgreSQL driver (only needed in production). Tests use SQLite.
+# psycopg2-binary is optional; skip to avoid build on minimal envs.
+# psycopg2-binary==2.9.9
 alembic==1.13.1
 
 # Cache y procesamiento asíncrono
@@ -31,11 +35,12 @@ redis==5.0.1
 rq==1.15.1
 
 # Utilidades
-pydantic==2.5.0
+pydantic==2.10.6
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 aiofiles==23.2.1
-pandas==2.1.4
+# pandas is not required for tests; skip heavy build on Python 3.13
+# pandas==2.1.4
 
 # Desarrollo y testing
 pytest==7.4.3
