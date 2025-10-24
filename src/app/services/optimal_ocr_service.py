@@ -10,7 +10,7 @@ import boto3
 import cv2
 import numpy as np
 import os
-from app.core.config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,172 @@ class OptimalOCRService:
         except Exception as e:
             logger.warning(f"No se pudo inicializar AWS Textract: {e}")
     
+    def extract_text(self, image_path: str, method: str = "auto") -> str:
+        """
+        Método síncrono para extraer texto (compatibilidad con código existente)
+        """
+        try:
+            logger.info(f"Extrayendo texto de: {image_path} con método: {method}")
+            # Para compatibilidad, usar Tesseract directamente
+            if method == "auto" or method == "tesseract":
+                result = self._extract_with_tesseract(image_path)
+                logger.info(f"Resultado Tesseract: {result[:100]}...")
+                return result
+            else:
+                # Para otros métodos, usar la estrategia óptima
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.extract_text_optimal(image_path))
+                    logger.info(f"Resultado óptimo: {result.text[:100]}...")
+                    return result.text
+                finally:
+                    loop.close()
+        except Exception as e:
+            logger.error(f"Error extrayendo texto: {e}")
+            return ""
+
+    def _extract_with_tesseract(self, image_path: str) -> str:
+        """
+        Extrae texto usando Tesseract OCR con preprocesamiento de alta precisión
+        """
+        try:
+            logger.info(f"Procesando archivo con Tesseract de alta precisión: {image_path}")
+            
+            # Verificar si es PDF
+            if image_path.lower().endswith('.pdf'):
+                logger.info("Archivo es PDF, convirtiendo a imagen...")
+                # Convertir PDF a imagen usando pdf2image con alta resolución
+                from pdf2image import convert_from_path
+                images = convert_from_path(image_path, dpi=300)  # Alta resolución
+                if images:
+                    logger.info(f"PDF convertido a {len(images)} imágenes")
+                    # Usar la primera página
+                    image = images[0]
+                    # Preprocesar imagen para mejor OCR
+                    processed_image = self._preprocess_image_for_ocr(image)
+                    # OCR con configuración optimizada
+                    text = self._extract_text_with_high_precision(processed_image)
+                    logger.info(f"Texto extraído del PDF: {text[:100]}...")
+                    return text
+                else:
+                    logger.warning("No se pudieron extraer imágenes del PDF")
+                    return ""
+            else:
+                logger.info("Archivo es imagen, procesando directamente...")
+                # Es una imagen, procesar directamente
+                image = Image.open(image_path)
+                # Preprocesar imagen para mejor OCR
+                processed_image = self._preprocess_image_for_ocr(image)
+                # OCR con configuración optimizada
+                text = self._extract_text_with_high_precision(processed_image)
+                logger.info(f"Texto extraído de imagen: {text[:100]}...")
+                return text
+        except Exception as e:
+            logger.error(f"Error con Tesseract: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return ""
+    
+    def _preprocess_image_for_ocr(self, image) -> Image.Image:
+        """
+        Preprocesa imagen para mejorar la precisión del OCR
+        """
+        try:
+            import numpy as np
+            
+            # Convertir PIL a numpy array
+            img_array = np.array(image)
+            
+            # Convertir a escala de grises si es necesario
+            if len(img_array.shape) == 3:
+                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = img_array
+            
+            # Aplicar filtros para mejorar el contraste
+            # 1. Aplicar filtro gaussiano para reducir ruido
+            blurred = cv2.GaussianBlur(gray, (1, 1), 0)
+            
+            # 2. Aplicar umbral adaptativo para mejorar el contraste
+            thresh = cv2.adaptiveThreshold(
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # 3. Operaciones morfológicas para limpiar la imagen
+            kernel = np.ones((1, 1), np.uint8)
+            cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+            
+            # 4. Redimensionar para mejorar la resolución (si es necesario)
+            height, width = cleaned.shape
+            if height < 1000:  # Si la imagen es muy pequeña
+                scale_factor = 1000 / height
+                new_width = int(width * scale_factor)
+                new_height = int(height * scale_factor)
+                cleaned = cv2.resize(cleaned, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+            
+            # Convertir de vuelta a PIL Image
+            processed_image = Image.fromarray(cleaned)
+            
+            logger.info("Imagen preprocesada para OCR de alta precisión")
+            return processed_image
+            
+        except Exception as e:
+            logger.warning(f"Error en preprocesamiento, usando imagen original: {e}")
+            return image
+    
+    def _extract_text_with_high_precision(self, image) -> str:
+        """
+        Extrae texto con configuración de alta precisión
+        """
+        try:
+            # Configuración optimizada para Tesseract
+            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ '
+            
+            # Intentar múltiples configuraciones para máxima precisión
+            configs = [
+                r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ ',
+                r'--oem 3 --psm 4',
+                r'--oem 3 --psm 6',
+                r'--oem 3 --psm 8',
+                r'--oem 1 --psm 6'
+            ]
+            
+            best_text = ""
+            best_confidence = 0
+            
+            for config in configs:
+                try:
+                    # Extraer texto con confianza
+                    text = pytesseract.image_to_string(image, lang='spa', config=config)
+                    
+                    # Obtener datos de confianza
+                    data = pytesseract.image_to_data(image, lang='spa', config=config, output_type=pytesseract.Output.DICT)
+                    
+                    # Calcular confianza promedio
+                    confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+                    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+                    
+                    # Si esta configuración da mejor resultado, guardarla
+                    if avg_confidence > best_confidence:
+                        best_confidence = avg_confidence
+                        best_text = text
+                        
+                    logger.info(f"Config {config[:20]}... - Confianza: {avg_confidence:.1f}%")
+                    
+                except Exception as e:
+                    logger.warning(f"Error con configuración {config[:20]}: {e}")
+                    continue
+            
+            logger.info(f"Mejor configuración seleccionada - Confianza: {best_confidence:.1f}%")
+            return best_text
+            
+        except Exception as e:
+            logger.error(f"Error en extracción de alta precisión: {e}")
+            # Fallback a configuración básica
+            return pytesseract.image_to_string(image, lang='spa')
+
     async def extract_text_optimal(self, image_path: str, document_type: str = None) -> OCRResult:
         """
         Extrae texto usando la estrategia óptima

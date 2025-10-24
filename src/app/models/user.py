@@ -4,7 +4,7 @@ Modelo de Usuario para autenticación
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.core.database import Base
+from ..core.database import Base
 
 
 class User(Base):
@@ -47,3 +47,4 @@ class User(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None
         }
+

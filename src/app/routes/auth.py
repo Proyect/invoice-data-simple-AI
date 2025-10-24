@@ -8,16 +8,16 @@ from datetime import datetime
 from typing import Union
 import logging
 
-from app.core.database import get_db
-from app.models.user import User
-from app.schemas.auth import (
+from ..core.database import get_db
+from ..models.user import User
+from ..schemas.auth import (
     UserCreate, UserResponse, UserLogin, TokenResponse, 
     RefreshTokenRequest, ChangePasswordRequest, MessageResponse,
     UserUpdate
 )
-from app.auth.password_handler import PasswordHandler
-from app.auth.jwt_handler import jwt_handler
-from app.auth.dependencies import get_current_active_user, get_current_admin_user
+from ..auth.password_handler import PasswordHandler
+from ..auth.jwt_handler import jwt_handler
+from ..auth.dependencies import get_current_active_user, get_current_admin_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -396,3 +396,4 @@ async def list_users(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
+

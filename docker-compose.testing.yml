@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # PostgreSQL local gratuito
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=document_extractor_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testing123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Redis local gratuito
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_test_data:/data
+    restart: unless-stopped
+
+  # Aplicación
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8007:8005"
+    volumes:
+      - ./src:/app/src
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://postgres:testing123@postgres:5432/document_extractor_test
+      - REDIS_URL=redis://redis:6379
+      # Solo Tesseract y spaCy (sin APIs externas)
+      - OPENAI_API_KEY=
+      - GOOGLE_APPLICATION_CREDENTIALS=
+      - AWS_ACCESS_KEY_ID=
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+
+
+
+
+
+
+
+
+
+
+
+

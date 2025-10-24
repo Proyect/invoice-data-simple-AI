@@ -1,5 +1,6 @@
 """
-Test suite para Invoice Data Extraction API
+Tests Module
+============
+
+Módulo de pruebas para el sistema optimizado de procesamiento de documentos.
 """
-
-

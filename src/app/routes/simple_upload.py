@@ -9,10 +9,10 @@ import shutil
 from datetime import datetime
 import logging
 
-from app.core.database import get_db
-from app.core.config import settings
-from app.models.document import Document
-from app.services.basic_extraction_service import get_basic_extraction_service
+from ..core.database import get_db
+from ..core.config import settings
+from ..models.document import Document
+from ..services.basic_extraction_service import get_basic_extraction_service
 import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path

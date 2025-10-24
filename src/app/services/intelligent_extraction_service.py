@@ -4,12 +4,10 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import openai
-from langchain import LLMChain, PromptTemplate
-from langchain.llms import OpenAI
 import re
 import spacy
 import json
-from app.core.config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +16,14 @@ class DocumentType(Enum):
     RECIBO = "recibo"
     CONTRATO = "contrato"
     FORMULARIO = "formulario"
+    TITULO = "titulo"
+    CERTIFICADO = "certificado"
+    DIPLOMA = "diploma"
+    LICENCIA = "licencia"
+    DNI = "dni"
+    DNI_TARJETA = "dni_tarjeta"
+    DNI_LIBRETA = "dni_libreta"
+    PASAPORTE = "pasaporte"
     DESCONOCIDO = "desconocido"
 
 @dataclass
@@ -43,14 +49,8 @@ class IntelligentExtractionService:
         else:
             logger.warning("OpenAI API key no configurada")
         
-        # Configurar LangChain
-        self.llm = None
-        if settings.OPENAI_API_KEY:
-            self.llm = OpenAI(
-                openai_api_key=settings.OPENAI_API_KEY,
-                temperature=settings.OPENAI_TEMPERATURE,
-                max_tokens=settings.OPENAI_MAX_TOKENS
-            )
+        # LangChain no es obligatorio para los tests; evitar importaciones pesadas
+        # Mantener lógica basada en OpenAI SDK oficial
         
         # Cargar spaCy (fallback)
         try:
@@ -82,6 +82,63 @@ class IntelligentExtractionService:
                 r"FORMULARIO",
                 r"SOLICITUD",
                 r"FORM"
+            ],
+            DocumentType.TITULO: [
+                r"TÍTULO",
+                r"TITLE",
+                r"DEGREE",
+                r"DIPLOMA",
+                r"BACHILLER",
+                r"LICENCIADO",
+                r"INGENIERO",
+                r"DOCTOR",
+                r"MAGISTER",
+                r"MASTER"
+            ],
+            DocumentType.CERTIFICADO: [
+                r"CERTIFICADO",
+                r"CERTIFICATE",
+                r"CERTIFICA",
+                r"CERTIFY",
+                r"CURSO",
+                r"COURSE",
+                r"CAPACITACIÓN",
+                r"TRAINING"
+            ],
+            DocumentType.DIPLOMA: [
+                r"DIPLOMA",
+                r"GRADUACIÓN",
+                r"GRADUATION",
+                r"EGRESADO",
+                r"GRADUATE"
+            ],
+            DocumentType.LICENCIA: [
+                r"LICENCIA",
+                r"LICENSE",
+                r"HABILITACIÓN",
+                r"AUTORIZACIÓN",
+                r"PERMISO"
+            ],
+            DocumentType.DNI: [
+                r"DOCUMENTO\s+NACIONAL\s+DE\s+IDENTIDAD",
+                r"DNI",
+                r"DOCUMENTO\s+DE\s+IDENTIDAD",
+                r"IDENTIDAD"
+            ],
+            DocumentType.DNI_TARJETA: [
+                r"REPÚBLICA\s+ARGENTINA",
+                r"DNI\s+TARJETA",
+                r"TARJETA\s+DE\s+IDENTIDAD"
+            ],
+            DocumentType.DNI_LIBRETA: [
+                r"LIBRETA\s+CÍVICA",
+                r"LIBRETA\s+CIVICA",
+                r"LC\s*:?\s*\d{7,8}"
+            ],
+            DocumentType.PASAPORTE: [
+                r"PASAPORTE",
+                r"PASSPORT",
+                r"REPÚBLICA\s+ARGENTINA\s+PASAPORTE"
             ]
         }
     
@@ -127,6 +184,13 @@ class IntelligentExtractionService:
         """Detecta el tipo de documento"""
         text_upper = text.upper()
         
+        # Heurística directa robusta: si contiene palabras clave claras
+        if "FACTURA" in text_upper:
+            return DocumentType.FACTURA
+        if "RECIBO" in text_upper:
+            return DocumentType.RECIBO
+        
+        # Fallback a patrones configurados
         for doc_type, patterns in self.document_patterns.items():
             for pattern in patterns:
                 if re.search(pattern, text_upper):

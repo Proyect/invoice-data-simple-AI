@@ -5,7 +5,7 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
-from app.core.config import settings
+from ..core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -180,3 +180,4 @@ class JWTHandler:
 
 # Instancia global del manejador JWT
 jwt_handler = JWTHandler()
+

@@ -5,9 +5,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
-from app.core.database import get_db
-from app.models.user import User
-from app.auth.jwt_handler import jwt_handler
+from ..core.database import get_db
+from ..models.user import User
+from .jwt_handler import jwt_handler
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,16 +48,16 @@ async def get_current_user(
             raise credentials_exception
         
         # Extraer información del usuario del token
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        username: str = payload.get("sub")
+        if username is None:
             logger.warning("Token sin información de usuario")
             raise credentials_exception
         
-        # Buscar usuario en la base de datos
-        user = db.query(User).filter(User.id == int(user_id)).first()
+        # Buscar usuario en la base de datos por username
+        user = db.query(User).filter(User.username == username).first()
         
         if user is None:
-            logger.warning(f"Usuario con ID {user_id} no encontrado")
+            logger.warning(f"Usuario con username {username} no encontrado")
             raise credentials_exception
         
         if not user.is_active:
@@ -198,3 +198,4 @@ def require_owner_or_admin(resource_user_id: int):
         return current_user
     
     return owner_checker
+

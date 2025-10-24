@@ -84,21 +84,45 @@ AWS_SECRET_ACCESS_KEY=...
 
 ## 🧪 Pruebas
 
+### Tests Automatizados
+```bash
+# Ejecutar todos los tests
+python run_tests.py
+
+# Tests con modo verbose
+python run_tests.py --verbose
+
+# Solo tests unitarios
+python run_tests.py --type unit
+
+# Con cobertura de código
+python run_tests.py --coverage
+```
+
+### Tests de Producción
+```bash
+# Test del sistema de producción
+python tests/test_production_system.py
+
+# Test detallado de endpoints
+python tests/test_production_system.py --detailed
+```
+
 ### Health Check
 ```bash
-curl http://localhost:8006/health
+curl http://localhost:8005/health
 ```
 
 ### Subir Documento
 ```bash
-curl -X POST "http://localhost:8006/api/v1/upload" \
+curl -X POST "http://localhost:8005/api/v2/uploads/" \
   -F "file=@documento.pdf" \
   -F "document_type=factura"
 ```
 
-### Verificar Tesseract
+### Verificar Sistema
 ```bash
-curl http://localhost:8006/api/v1/upload/test
+curl http://localhost:8005/info
 ```
 
 ## 🐳 Docker

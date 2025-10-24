@@ -60,7 +60,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: python -m rq worker document_processing --url redis://redis:6379
+    # Use the installed `rq` CLI directly instead of `python -m rq`,
+    # which can fail if the package does not provide a __main__ module.
+    command: rq worker document_processing --url redis://redis:6379
     volumes:
       - ./src:/app/src
       - ./uploads:/app/uploads

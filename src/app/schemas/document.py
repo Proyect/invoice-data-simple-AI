@@ -14,7 +14,7 @@ class DocumentCreate(DocumentBase):
 class DocumentUpdate(BaseModel):
     raw_text: Optional[str] = Field(None, description="Texto extraído por OCR")
     extracted_data: Optional[Dict[str, Any]] = Field(None, description="Datos estructurados extraídos")
-    confidence_score: Optional[int] = Field(None, ge=0, le=100, description="Puntuación de confianza del OCR")
+    confidence_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Puntuación de confianza del OCR")
     ocr_provider: Optional[str] = Field(None, description="Proveedor OCR utilizado")
     ocr_cost: Optional[str] = Field(None, description="Costo del OCR")
     processing_time: Optional[str] = Field(None, description="Tiempo de procesamiento")
@@ -26,7 +26,7 @@ class DocumentResponse(DocumentBase):
     mime_type: Optional[str]
     raw_text: Optional[str]
     extracted_data: Optional[Dict[str, Any]]
-    confidence_score: Optional[int]
+    confidence_score: Optional[float]
     ocr_provider: Optional[str]
     ocr_cost: Optional[str]
     processing_time: Optional[str]
@@ -47,7 +47,7 @@ class ExtractedDataResponse(BaseModel):
     filename: str
     extracted_data: Dict[str, Any]
     raw_text: Optional[str]
-    confidence_score: Optional[int]
+    confidence_score: Optional[float]
     ocr_provider: Optional[str] = None
     processing_time: Optional[str] = None
 

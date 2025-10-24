@@ -1,11 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.models.document import Document
-from app.schemas.document import DocumentResponse, ExtractedDataResponse
-from app.services.async_processing_service import AsyncProcessingService
-from app.services.cache_service import cache_service
-from app.core.config import settings
+from ..core.database import get_db
+from ..models.document import Document
+from ..schemas.document import DocumentResponse, ExtractedDataResponse
+from ..services.async_processing_service import AsyncProcessingService
+from ..services.cache_service import cache_service
+from ..core.config import settings
 import shutil
 from pathlib import Path
 import os

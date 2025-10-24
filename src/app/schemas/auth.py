@@ -17,37 +17,16 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Esquema para crear usuario"""
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=6, max_length=72)
     
     @validator('password')
     def validate_password(cls, v):
         """Validar fortaleza de contraseña"""
-        if len(v) < 8:
-            raise ValueError('La contraseña debe tener al menos 8 caracteres')
+        if len(v) < 6:
+            raise ValueError('La contraseña debe tener al menos 6 caracteres')
         
-        if len(v) > 128:
-            raise ValueError('La contraseña no puede tener más de 128 caracteres')
-        
-        # Verificar que tenga al menos una letra minúscula
-        if not any(c.islower() for c in v):
-            raise ValueError('La contraseña debe contener al menos una letra minúscula')
-        
-        # Verificar que tenga al menos una letra mayúscula
-        if not any(c.isupper() for c in v):
-            raise ValueError('La contraseña debe contener al menos una letra mayúscula')
-        
-        # Verificar que tenga al menos un número
-        if not any(c.isdigit() for c in v):
-            raise ValueError('La contraseña debe contener al menos un número')
-        
-        # Verificar que tenga al menos un carácter especial
-        special_chars = "!@#$%^&*(),.?\":{}|<>"
-        if not any(c in special_chars for c in v):
-            raise ValueError('La contraseña debe contener al menos un carácter especial')
-        
-        # Verificar que no contenga espacios
-        if ' ' in v:
-            raise ValueError('La contraseña no puede contener espacios')
+        if len(v) > 72:
+            raise ValueError('La contraseña no puede tener más de 72 caracteres')
         
         return v
     
@@ -191,3 +170,4 @@ class MessageResponse(BaseModel):
     """Esquema para respuestas de mensaje"""
     message: str
     success: bool = True
+

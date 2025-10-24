@@ -4,13 +4,12 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import redis
-from rq import Queue, Worker
-from rq import connections as rq_connections
+from rq import Queue, Worker, Connection
 from rq.job import Job
 import json
-from app.core.config import settings
-from app.core.database import get_db
-from app.models.document import Document
+from ..core.config import settings
+from ..core.database import get_db
+from ..models.document import Document
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +50,8 @@ class AsyncProcessingService:
             self.queue = None
         
         # Servicios
-        from app.services.optimal_ocr_service import OptimalOCRService
-        from app.services.intelligent_extraction_service import IntelligentExtractionService
+        from ..services.optimal_ocr_service import OptimalOCRService
+        from ..services.intelligent_extraction_service import IntelligentExtractionService
         
         self.ocr_service = OptimalOCRService()
         self.extraction_service = IntelligentExtractionService()
@@ -206,7 +205,7 @@ class AsyncProcessingService:
         """Actualiza documento en base de datos con resultados"""
         try:
             from sqlalchemy.orm import sessionmaker
-            from app.core.database import engine
+            from ..core.database import engine
             
             SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
             db = SessionLocal()
@@ -240,7 +239,7 @@ class AsyncProcessingService:
         """Actualiza documento con error"""
         try:
             from sqlalchemy.orm import sessionmaker
-            from app.core.database import engine
+            from ..core.database import engine
             
             SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
             db = SessionLocal()

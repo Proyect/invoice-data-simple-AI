@@ -24,7 +24,14 @@ class PasswordHandler:
         Returns:
             bool: True si la contraseña es correcta
         """
-        return pwd_context.verify(plain_password, hashed_password)
+        # Si es un hash bcrypt, usar bcrypt
+        if hashed_password.startswith('$2b$'):
+            return pwd_context.verify(plain_password, hashed_password)
+        
+        # Si es un hash SHA256, usar SHA256
+        import hashlib
+        sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+        return sha256_hash == hashed_password
     
     @staticmethod
     def get_password_hash(password: str) -> str:

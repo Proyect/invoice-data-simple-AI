@@ -1,7 +1,9 @@
 import json
 import pickle
 from typing import Any, Optional
-from app.core.database import redis_client
+from ..core.database import redis_client
+from ..core.config import settings
+import redis as _redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,6 +14,22 @@ class CacheService:
     def __init__(self):
         self.redis = redis_client
         self.default_ttl = 3600  # 1 hora
+
+        # Si Redis no estuvo disponible al iniciar la app, intentar conectarse ahora.
+        if self.redis is None:
+            try:
+                self.redis = _redis.Redis(
+                    host=settings.REDIS_HOST,
+                    port=settings.REDIS_PORT,
+                    db=settings.REDIS_DB,
+                    decode_responses=True,
+                )
+                # Verificar conexión (no falla si está mockeado en tests)
+                self.redis.ping()
+                logger.info("Redis conectado dinámicamente en CacheService")
+            except Exception as e:
+                logger.warning(f"Redis no disponible (CacheService init): {e}")
+                self.redis = None
     
     async def get(self, key: str) -> Optional[Any]:
         """Obtener valor del cache"""
