@@ -489,3 +489,6 @@ class TestBaseSchemas:
         assert "date_from debe ser anterior a date_to" in str(exc_info.value)
 
 
+
+
+
