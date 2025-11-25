@@ -111,30 +111,50 @@ class OptimalOCRService:
             # Verificar si es PDF
             if image_path.lower().endswith('.pdf'):
                 logger.info("Archivo es PDF, convirtiendo a imagen...")
-                # Convertir PDF a imagen usando pdf2image con alta resolución
-                from pdf2image import convert_from_path
-                images = convert_from_path(image_path, dpi=300)  # Alta resolución
-                if images:
-                    logger.info(f"PDF convertido a {len(images)} imágenes")
-                    # Usar la primera página
-                    image = images[0]
-                    # Preprocesar imagen para mejor OCR
-                    processed_image = self._preprocess_image_for_ocr(image)
-                    # OCR con configuración optimizada
-                    text = self._extract_text_with_high_precision(processed_image)
-                    logger.info(f"Texto extraído del PDF: {text[:100]}...")
-                    return text
-                else:
-                    logger.warning("No se pudieron extraer imágenes del PDF")
+                try:
+                    # Convertir PDF a imagen usando pdf2image con alta resolución
+                    from pdf2image import convert_from_path
+                    from pdf2image.exceptions import PDFPageCountError, PDFInfoNotInstalledError
+                    
+                    try:
+                        images = convert_from_path(image_path, dpi=300)  # Alta resolución
+                    except (PDFPageCountError, PDFInfoNotInstalledError) as e:
+                        logger.warning(f"Error al leer PDF (puede estar corrupto o vacío): {e}")
+                        # Intentar con configuración más permisiva
+                        try:
+                            images = convert_from_path(image_path, dpi=150, strict=False)
+                        except Exception as e2:
+                            logger.error(f"No se pudo convertir PDF: {e2}")
+                            return ""
+                    
+                    if images and len(images) > 0:
+                        logger.info(f"PDF convertido a {len(images)} imágenes")
+                        # Usar la primera página
+                        image = images[0]
+                        # Preprocesar imagen para mejor OCR (detectar si es factura del path)
+                        is_invoice = 'factura' in image_path.lower()
+                        processed_image = self._preprocess_image_for_ocr(image, 'factura' if is_invoice else None)
+                        # OCR con configuración optimizada
+                        text = self._extract_text_with_high_precision(processed_image, 'factura' if is_invoice else None)
+                        logger.info(f"Texto extraído del PDF: {text[:100]}...")
+                        return text
+                    else:
+                        logger.warning("No se pudieron extraer imágenes del PDF")
+                        return ""
+                except Exception as e:
+                    logger.error(f"Error procesando PDF: {e}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                     return ""
             else:
                 logger.info("Archivo es imagen, procesando directamente...")
                 # Es una imagen, procesar directamente
                 image = Image.open(image_path)
-                # Preprocesar imagen para mejor OCR
-                processed_image = self._preprocess_image_for_ocr(image)
+                # Preprocesar imagen para mejor OCR (detectar si es factura del path)
+                is_invoice = 'factura' in image_path.lower()
+                processed_image = self._preprocess_image_for_ocr(image, 'factura' if is_invoice else None)
                 # OCR con configuración optimizada
-                text = self._extract_text_with_high_precision(processed_image)
+                text = self._extract_text_with_high_precision(processed_image, 'factura' if is_invoice else None)
                 logger.info(f"Texto extraído de imagen: {text[:100]}...")
                 return text
         except Exception as e:
@@ -143,9 +163,10 @@ class OptimalOCRService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return ""
     
-    def _preprocess_image_for_ocr(self, image) -> Image.Image:
+    def _preprocess_image_for_ocr(self, image, document_type: str = None) -> Image.Image:
         """
         Preprocesa imagen para mejorar la precisión del OCR
+        Optimizado especialmente para facturas
         """
         try:
             import numpy as np
@@ -159,53 +180,89 @@ class OptimalOCRService:
             else:
                 gray = img_array
             
-            # Aplicar filtros para mejorar el contraste
-            # 1. Aplicar filtro gaussiano para reducir ruido
-            blurred = cv2.GaussianBlur(gray, (1, 1), 0)
-            
-            # 2. Aplicar umbral adaptativo para mejorar el contraste
-            thresh = cv2.adaptiveThreshold(
-                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
-            
-            # 3. Operaciones morfológicas para limpiar la imagen
-            kernel = np.ones((1, 1), np.uint8)
-            cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-            
-            # 4. Redimensionar para mejorar la resolución (si es necesario)
-            height, width = cleaned.shape
-            if height < 1000:  # Si la imagen es muy pequeña
-                scale_factor = 1000 / height
-                new_width = int(width * scale_factor)
-                new_height = int(height * scale_factor)
-                cleaned = cv2.resize(cleaned, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+            # Para facturas, usar preprocesamiento más agresivo
+            if document_type and 'factura' in document_type.lower():
+                # 1. Aplicar filtro gaussiano más fuerte para reducir ruido
+                blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+                
+                # 2. Aplicar CLAHE (Contrast Limited Adaptive Histogram Equalization) para mejorar contraste
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                enhanced = clahe.apply(blurred)
+                
+                # 3. Aplicar umbral adaptativo con parámetros optimizados para facturas
+                thresh = cv2.adaptiveThreshold(
+                    enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5
+                )
+                
+                # 4. Operaciones morfológicas más agresivas para limpiar líneas y bordes
+                kernel = np.ones((2, 2), np.uint8)
+                cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+                cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel)
+                
+                # 5. Redimensionar para mejorar la resolución (facturas necesitan alta resolución)
+                height, width = cleaned.shape
+                if height < 1500:  # Para facturas, mínimo 1500px de altura
+                    scale_factor = 1500 / height
+                    new_width = int(width * scale_factor)
+                    new_height = int(height * scale_factor)
+                    cleaned = cv2.resize(cleaned, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+            else:
+                # Preprocesamiento estándar para otros documentos
+                # 1. Aplicar filtro gaussiano para reducir ruido
+                blurred = cv2.GaussianBlur(gray, (1, 1), 0)
+                
+                # 2. Aplicar umbral adaptativo para mejorar el contraste
+                thresh = cv2.adaptiveThreshold(
+                    blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+                )
+                
+                # 3. Operaciones morfológicas para limpiar la imagen
+                kernel = np.ones((1, 1), np.uint8)
+                cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+                
+                # 4. Redimensionar para mejorar la resolución (si es necesario)
+                height, width = cleaned.shape
+                if height < 1000:  # Si la imagen es muy pequeña
+                    scale_factor = 1000 / height
+                    new_width = int(width * scale_factor)
+                    new_height = int(height * scale_factor)
+                    cleaned = cv2.resize(cleaned, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
             
             # Convertir de vuelta a PIL Image
             processed_image = Image.fromarray(cleaned)
             
-            logger.info("Imagen preprocesada para OCR de alta precisión")
+            logger.info(f"Imagen preprocesada para OCR de alta precisión (tipo: {document_type or 'general'})")
             return processed_image
             
         except Exception as e:
             logger.warning(f"Error en preprocesamiento, usando imagen original: {e}")
             return image
     
-    def _extract_text_with_high_precision(self, image) -> str:
+    def _extract_text_with_high_precision(self, image, document_type: str = None) -> str:
         """
         Extrae texto con configuración de alta precisión
+        Optimizado para facturas con configuraciones específicas
         """
         try:
-            # Configuración optimizada para Tesseract
-            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ '
-            
-            # Intentar múltiples configuraciones para máxima precisión
-            configs = [
-                r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ ',
-                r'--oem 3 --psm 4',
-                r'--oem 3 --psm 6',
-                r'--oem 3 --psm 8',
-                r'--oem 1 --psm 6'
-            ]
+            # Configuraciones optimizadas según tipo de documento
+            if document_type and 'factura' in document_type.lower():
+                # Para facturas, usar configuraciones que preserven números y estructura tabular
+                configs = [
+                    r'--oem 3 --psm 4',  # PSM 4: Assume a single column of text of variable sizes
+                    r'--oem 3 --psm 6',  # PSM 6: Assume a single uniform block of text
+                    r'--oem 3 --psm 11',  # PSM 11: Sparse text. Find as much text as possible in no particular order
+                    r'--oem 3 --psm 12',  # PSM 12: Sparse text with OSD
+                    r'--oem 3 --psm 4 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ ',
+                ]
+            else:
+                # Configuración estándar para otros documentos
+                configs = [
+                    r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzáéíóúñü.,:;()$-/ ',
+                    r'--oem 3 --psm 4',
+                    r'--oem 3 --psm 6',
+                    r'--oem 3 --psm 8',
+                    r'--oem 1 --psm 6'
+                ]
             
             best_text = ""
             best_confidence = 0
@@ -221,6 +278,14 @@ class OptimalOCRService:
                     # Calcular confianza promedio
                     confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
                     avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+                    
+                    # Para facturas, también considerar la cantidad de números encontrados
+                    if document_type and 'factura' in document_type.lower():
+                        # Contar números en el texto (facturas tienen muchos números)
+                        numbers_count = len(re.findall(r'\d+', text))
+                        # Ajustar confianza basada en cantidad de números (más números = probablemente mejor)
+                        if numbers_count > 20:  # Facturas típicamente tienen muchos números
+                            avg_confidence += 5  # Bonificar
                     
                     # Si esta configuración da mejor resultado, guardarla
                     if avg_confidence > best_confidence:
@@ -277,8 +342,27 @@ class OptimalOCRService:
         Análisis avanzado de complejidad del documento
         """
         try:
-            # Cargar imagen
-            image = cv2.imread(image_path)
+            # Cargar imagen (manejar PDFs)
+            image = None
+            if image_path.lower().endswith('.pdf'):
+                # Convertir PDF a imagen para análisis
+                try:
+                    from pdf2image import convert_from_path
+                    # Intentar convertir sin especificar páginas primero
+                    images = convert_from_path(image_path, dpi=150)
+                    if images and len(images) > 0:
+                        # Convertir PIL Image a numpy array para OpenCV
+                        import numpy as np
+                        image = cv2.cvtColor(np.array(images[0]), cv2.COLOR_RGB2BGR)
+                    else:
+                        logger.warning("PDF no pudo ser convertido a imagen")
+                        return DocumentComplexity.MEDIUM
+                except Exception as e:
+                    logger.warning(f"No se pudo convertir PDF para análisis: {e}")
+                    return DocumentComplexity.MEDIUM
+            else:
+                image = cv2.imread(image_path)
+            
             if image is None:
                 return DocumentComplexity.MEDIUM
             
@@ -454,28 +538,49 @@ class OptimalOCRService:
     async def _use_tesseract(self, image_path: str) -> OCRResult:
         """Usar Tesseract como fallback"""
         try:
-            image = Image.open(image_path)
-            
-            # Configuración optimizada para español
-            custom_config = r'--oem 3 --psm 6 -l spa'
-            text = pytesseract.image_to_string(image, config=custom_config)
-            
-            # Calcular confianza
-            data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
-            confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
-            avg_confidence = sum(confidences) / len(confidences) / 100 if confidences else 0.5
-            
-            return OCRResult(
-                text=text.strip(),
-                confidence=avg_confidence,
-                provider="tesseract",
-                cost=0.0,
-                processing_time=0.0,
-                metadata={
-                    "words_detected": len([w for w in data['text'] if w.strip()]),
-                    "avg_word_confidence": avg_confidence
-                }
-            )
+            # Manejar PDFs
+            if image_path.lower().endswith('.pdf'):
+                # Usar el método síncrono que ya maneja PDFs
+                text = self._extract_with_tesseract(image_path)
+                # Calcular confianza básica
+                avg_confidence = 0.7 if text and len(text.strip()) > 0 else 0.3
+                words_detected = len(text.split()) if text else 0
+                
+                return OCRResult(
+                    text=text.strip(),
+                    confidence=avg_confidence,
+                    provider="tesseract",
+                    cost=0.0,
+                    processing_time=0.0,
+                    metadata={
+                        "words_detected": words_detected,
+                        "avg_word_confidence": avg_confidence,
+                        "is_pdf": True
+                    }
+                )
+            else:
+                image = Image.open(image_path)
+                
+                # Configuración optimizada para español
+                custom_config = r'--oem 3 --psm 6 -l spa'
+                text = pytesseract.image_to_string(image, config=custom_config)
+                
+                # Calcular confianza
+                data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
+                confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+                avg_confidence = sum(confidences) / len(confidences) / 100 if confidences else 0.5
+                
+                return OCRResult(
+                    text=text.strip(),
+                    confidence=avg_confidence,
+                    provider="tesseract",
+                    cost=0.0,
+                    processing_time=0.0,
+                    metadata={
+                        "words_detected": len([w for w in data['text'] if w.strip()]),
+                        "avg_word_confidence": avg_confidence
+                    }
+                )
             
         except Exception as e:
             logger.error(f"Error con Tesseract: {e}")

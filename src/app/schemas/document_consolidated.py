@@ -61,7 +61,7 @@ class ExtractionMethodEnum(str, Enum):
 
 
 # Schemas base
-class DocumentBaseSchema(BaseSchema, FileSchema):
+class DocumentBaseSchema(FileSchema):
     """Schema base para documentos"""
     document_type: Optional[DocumentTypeEnum] = Field(None, description="Tipo de documento")
     language: str = Field("es", max_length=10, description="Idioma del documento")
@@ -171,7 +171,7 @@ class DocumentResponseSchema(DocumentBaseSchema, TimestampSchema, SoftDeleteSche
         return self
 
 
-class DocumentListResponseSchema(BaseSchema, PaginationSchema):
+class DocumentListResponseSchema(PaginationSchema):
     """Schema para listado de documentos"""
     documents: List[DocumentResponseSchema] = Field(..., description="Lista de documentos")
 

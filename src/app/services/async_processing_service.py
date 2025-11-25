@@ -8,6 +8,7 @@ from rq import Queue, Worker, Connection
 from rq.job import Job
 import json
 from ..core.config import settings
+from ..core.environment import get_settings
 from ..core.database import get_db
 from ..models.document import Document
 
@@ -34,27 +35,64 @@ class AsyncProcessingService:
     Servicio de procesamiento asíncrono usando Redis Queue
     """
     
-    def __init__(self):
-        # Configurar Redis
-        try:
-            self.redis_conn = redis.Redis(
-                host=settings.REDIS_HOST,
-                port=settings.REDIS_PORT,
-                db=settings.REDIS_DB
-            )
-            self.queue = Queue(settings.RQ_QUEUE_NAME, connection=self.redis_conn)
-            logger.info("Redis Queue inicializado correctamente")
-        except Exception as e:
-            logger.error(f"Error inicializando Redis Queue: {e}")
-            self.redis_conn = None
-            self.queue = None
+    def __init__(
+        self,
+        ocr_service=None,
+        extraction_service=None,
+        redis_conn=None,
+        queue=None
+    ):
+        """
+        Inicializar servicio con dependencias inyectadas.
         
-        # Servicios
-        from ..services.optimal_ocr_service import OptimalOCRService
-        from ..services.intelligent_extraction_service import IntelligentExtractionService
+        Args:
+            ocr_service: Instancia de OptimalOCRService (opcional)
+            extraction_service: Instancia de IntelligentExtractionService (opcional)
+            redis_conn: Conexión Redis (opcional)
+            queue: Cola RQ (opcional)
+        """
+        # Inyectar servicios o crear instancias si no se proporcionan
+        if ocr_service is None:
+            from ..services.optimal_ocr_service import OptimalOCRService
+            ocr_service = OptimalOCRService()
         
-        self.ocr_service = OptimalOCRService()
-        self.extraction_service = IntelligentExtractionService()
+        if extraction_service is None:
+            from ..services.intelligent_extraction_service import IntelligentExtractionService
+            extraction_service = IntelligentExtractionService()
+        
+        self.ocr_service = ocr_service
+        self.extraction_service = extraction_service
+        
+        # Configurar Redis si no se proporciona
+        if redis_conn is None or queue is None:
+            try:
+                env_settings = get_settings()
+                redis_config = env_settings.redis
+                
+                if redis_conn is None:
+                    self.redis_conn = redis.Redis(
+                        host=redis_config.host,
+                        port=redis_config.port,
+                        db=redis_config.db,
+                        password=redis_config.password,
+                        decode_responses=False  # RQ necesita bytes
+                    )
+                else:
+                    self.redis_conn = redis_conn
+                
+                if queue is None:
+                    self.queue = Queue(env_settings.rq_queue_name, connection=self.redis_conn)
+                else:
+                    self.queue = queue
+                
+                logger.info(f"Redis Queue inicializado correctamente en {redis_config.host}:{redis_config.port}")
+            except Exception as e:
+                logger.error(f"Error inicializando Redis Queue: {e}")
+                self.redis_conn = redis_conn
+                self.queue = queue
+        else:
+            self.redis_conn = redis_conn
+            self.queue = queue
     
     async def process_document_async(self, image_path: str, document_type: str = None, document_id: int = None) -> str:
         """
@@ -152,6 +190,10 @@ class AsyncProcessingService:
         try:
             logger.info(f"Procesando documento: {image_path}")
             
+            # Actualizar estado a "processing" si hay document_id
+            if document_id:
+                self._update_document_status(document_id, "processing")
+            
             # Paso 1: OCR
             ocr_result = asyncio.run(self.ocr_service.extract_text_optimal(image_path, document_type))
             
@@ -214,17 +256,72 @@ class AsyncProcessingService:
                 document = db.query(Document).filter(Document.id == document_id).first()
                 if document:
                     document.raw_text = ocr_result.text
-                    document.extracted_data = {
-                        'document_type': extraction_result.document_type.value,
-                        'confidence': extraction_result.confidence,
-                        'entities': extraction_result.entities,
-                        'structured_data': extraction_result.structured_data,
-                        'metadata': extraction_result.metadata
-                    }
-                    document.confidence_score = int(extraction_result.confidence * 100)
-                    document.ocr_provider = ocr_result.provider
-                    document.ocr_cost = str(ocr_result.cost)
-                    document.processing_time = str(ocr_result.processing_time)
+                    
+                    # Función para aplanar datos de forma robusta
+                    def prepare_extracted_data(extraction_result):
+                        """Prepara extracted_data para guardar en BD"""
+                        # Para facturas, siempre aplanar structured_data
+                        if extraction_result.document_type.value == 'factura':
+                            if extraction_result.structured_data and isinstance(extraction_result.structured_data, dict):
+                                # Copiar structured_data como base
+                                extracted_data = extraction_result.structured_data.copy()
+                                
+                                # Asegurar campos básicos
+                                extracted_data['document_type'] = 'factura'
+                                extracted_data['confidence'] = extraction_result.confidence
+                                
+                                # Agregar metadata si existe
+                                if extraction_result.metadata:
+                                    extracted_data['metadata'] = extraction_result.metadata
+                                
+                                # Validar que no esté vacío
+                                if not extracted_data or len(extracted_data) <= 2:  # Solo document_type y confidence
+                                    logger.warning(f"Documento {document_id}: structured_data parece vacío o incompleto")
+                                    # Intentar usar entities como fallback
+                                    if extraction_result.entities:
+                                        extracted_data['entities'] = extraction_result.entities
+                                
+                                logger.info(f"Documento {document_id}: Guardando extracted_data con {len(extracted_data)} campos")
+                                return extracted_data
+                            else:
+                                logger.warning(f"Documento {document_id}: No hay structured_data para factura")
+                                # Fallback: crear estructura básica
+                                return {
+                                    'document_type': 'factura',
+                                    'confidence': extraction_result.confidence,
+                                    'entities': extraction_result.entities if extraction_result.entities else {},
+                                    'metadata': extraction_result.metadata if extraction_result.metadata else {}
+                                }
+                        else:
+                            # Para otros documentos, mantener estructura anidada pero asegurar que tenga contenido
+                            structured_data = extraction_result.structured_data if extraction_result.structured_data else {}
+                            return {
+                                'document_type': extraction_result.document_type.value if hasattr(extraction_result.document_type, 'value') else str(extraction_result.document_type),
+                                'confidence': extraction_result.confidence,
+                                'entities': extraction_result.entities if extraction_result.entities else {},
+                                'structured_data': structured_data,
+                                'metadata': extraction_result.metadata if extraction_result.metadata else {}
+                            }
+                    
+                    # Preparar datos
+                    extracted_data = prepare_extracted_data(extraction_result)
+                    
+                    # Validar antes de guardar
+                    if not extracted_data or (isinstance(extracted_data, dict) and len(extracted_data) == 0):
+                        logger.error(f"Documento {document_id}: extracted_data está vacío, no se guardará")
+                    else:
+                        document.extracted_data = extracted_data
+                        logger.info(f"Documento {document_id}: extracted_data guardado correctamente con {len(extracted_data) if isinstance(extracted_data, dict) else 0} campos")
+                    document.confidence_score = int(extraction_result.confidence * 100) if extraction_result.confidence else None
+                    document.ocr_provider = ocr_result.provider if hasattr(ocr_result, 'provider') else 'tesseract'
+                    # Convertir ocr_cost a float (la base de datos espera double precision)
+                    ocr_cost_value = ocr_result.cost if hasattr(ocr_result, 'cost') else 0.0
+                    document.ocr_cost = float(ocr_cost_value) if ocr_cost_value is not None else 0.0
+                    # processing_time como string (VARCHAR)
+                    processing_time_value = ocr_result.processing_time if hasattr(ocr_result, 'processing_time') else 0.0
+                    document.processing_time = str(processing_time_value) if processing_time_value is not None else "0"
+                    # Actualizar estado a "completed" cuando se procesa exitosamente
+                    document.status = "completed"
                     
                     db.commit()
                     logger.info(f"Documento {document_id} actualizado en base de datos")
@@ -234,6 +331,26 @@ class AsyncProcessingService:
                 
         except Exception as e:
             logger.error(f"Error actualizando documento en base de datos: {e}")
+    
+    def _update_document_status(self, document_id: int, status: str):
+        """Actualiza el estado de un documento"""
+        try:
+            from sqlalchemy.orm import sessionmaker
+            from ..core.database import engine
+            
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            db = SessionLocal()
+            
+            try:
+                document = db.query(Document).filter(Document.id == document_id).first()
+                if document:
+                    document.status = status
+                    db.commit()
+                    logger.info(f"Estado del documento {document_id} actualizado a: {status}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error actualizando estado del documento: {e}")
     
     def _update_document_error(self, document_id: int, error_message: str):
         """Actualiza documento con error"""
@@ -247,6 +364,7 @@ class AsyncProcessingService:
             try:
                 document = db.query(Document).filter(Document.id == document_id).first()
                 if document:
+                    document.status = "failed"
                     document.extracted_data = {
                         'error': error_message,
                         'status': 'failed'

@@ -13,23 +13,36 @@ logger = logging.getLogger(__name__)
 class BasicExtractionService:
     """Servicio de extracción de datos usando spaCy y regex"""
     
-    def __init__(self):
-        """Inicializar el servicio"""
+    def __init__(
+        self,
+        afip_service=None,
+        universal_validation=None
+    ):
+        """
+        Inicializar el servicio con dependencias inyectadas.
+        
+        Args:
+            afip_service: Instancia de AFIPInvoiceExtractionService (opcional)
+            universal_validation: Instancia de UniversalValidationService (opcional)
+        """
         try:
             self.nlp = spacy.load("es_core_news_sm")
             logger.info("Modelo de spaCy cargado correctamente")
-            
-            # Importar servicios
-            from .afip_invoice_extraction_service import AFIPInvoiceExtractionService
-            from .universal_validation_service import UniversalValidationService
-            
-            self.afip_service = AFIPInvoiceExtractionService()
-            self.universal_validation = UniversalValidationService()
-            
         except Exception as e:
             logger.error(f"Error cargando modelo de spaCy: {e}")
             self.nlp = None
-            self.afip_service = None
+        
+        # Inyectar dependencias o crear instancias si no se proporcionan
+        if afip_service is None:
+            from .afip_invoice_extraction_service import AFIPInvoiceExtractionService
+            afip_service = AFIPInvoiceExtractionService()
+        
+        if universal_validation is None:
+            from .universal_validation_service import UniversalValidationService
+            universal_validation = UniversalValidationService()
+        
+        self.afip_service = afip_service
+        self.universal_validation = universal_validation
     
     def extract_data(self, text: str, document_type: str = "factura") -> Dict[str, Any]:
         """

@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from app.services.academic_document_extraction_service import AcademicDocumentExtractionService
 
+@pytest.mark.unit
 def test_titulo_extraction():
     """Probar extracción de título académico"""
     print("PROBANDO EXTRACCION DE TITULO ACADEMICO")
