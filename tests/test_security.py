@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from io import BytesIO
 
 
+@pytest.mark.security
+@pytest.mark.integration
 class TestFileUploadSecurity:
     """Tests de seguridad en upload de archivos"""
     
@@ -63,6 +65,8 @@ class TestFileUploadSecurity:
         assert response.status_code in [400, 415, 422]
 
 
+@pytest.mark.security
+@pytest.mark.integration
 class TestInjectionAttacks:
     """Tests de ataques de inyección"""
     
@@ -214,6 +218,8 @@ class TestAuthenticationAuthorization:
         """Test de que endpoints admin requieren rol admin"""
         # TODO: Implementar cuando haya endpoints de admin
         pass
+
+
 
 
 

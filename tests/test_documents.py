@@ -7,9 +7,12 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 
 
+@pytest.mark.integration
+@pytest.mark.requires_db
 class TestDocumentsList:
     """Tests para listar documentos"""
     
+    @pytest.mark.integration
     def test_list_documents_empty(self, client: TestClient, test_db: Session):
         """Test de lista vacía"""
         response = client.get("/api/v1/documents")
@@ -71,9 +74,12 @@ class TestDocumentsList:
         assert data["total"] == 15
 
 
+@pytest.mark.integration
+@pytest.mark.requires_db
 class TestDocumentGet:
     """Tests para obtener documento individual"""
     
+    @pytest.mark.integration
     def test_get_document_success(self, client: TestClient, sample_document_data):
         """Test de obtener documento existente"""
         response = client.get(f"/api/v1/documents/{sample_document_data.id}")

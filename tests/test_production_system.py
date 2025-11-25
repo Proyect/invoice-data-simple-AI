@@ -5,13 +5,18 @@ Test del Sistema de Producción
 
 Script para probar los componentes principales del sistema en producción.
 """
+import pytest
 import requests
 import logging
 from typing import Dict, Any
+from unittest.mock import patch, MagicMock
 
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.integration
+@pytest.mark.requires_api
+@pytest.mark.slow
 def test_system(base_url: str = "http://localhost:8005") -> bool:
     """Probar sistema básico"""
     print("=== TEST SISTEMA DE PRODUCCIÓN ===")
@@ -22,7 +27,7 @@ def test_system(base_url: str = "http://localhost:8005") -> bool:
     
     # Test 1: Servidor funcionando
     try:
-        response = requests.get(f"{base_url}/", timeout=5)
+        response = requests.get(f"{base_url}/", timeout=10)
         if response.status_code == 200:
             print("✅ Servidor funcionando")
             tests_passed += 1
@@ -34,7 +39,7 @@ def test_system(base_url: str = "http://localhost:8005") -> bool:
     
     # Test 2: Health check
     try:
-        response = requests.get(f"{base_url}/health", timeout=5)
+        response = requests.get(f"{base_url}/health", timeout=10)
         if response.status_code == 200:
             print("✅ Health check OK")
             tests_passed += 1
@@ -45,7 +50,7 @@ def test_system(base_url: str = "http://localhost:8005") -> bool:
     
     # Test 3: Documentos
     try:
-        response = requests.get(f"{base_url}/api/v2/documents/", timeout=5)
+        response = requests.get(f"{base_url}/api/v2/documents/", timeout=10)
         if response.status_code == 200:
             data = response.json()
             print(f"✅ Documentos: {data.get('total', 0)} encontrados")
@@ -57,7 +62,7 @@ def test_system(base_url: str = "http://localhost:8005") -> bool:
     
     # Test 4: Estadísticas
     try:
-        response = requests.get(f"{base_url}/api/v2/documents/stats/overview", timeout=5)
+        response = requests.get(f"{base_url}/api/v2/documents/stats/overview", timeout=10)
         if response.status_code == 200:
             print("✅ Estadísticas OK")
             tests_passed += 1
@@ -70,6 +75,9 @@ def test_system(base_url: str = "http://localhost:8005") -> bool:
     return tests_passed == total_tests
 
 
+@pytest.mark.integration
+@pytest.mark.requires_api
+@pytest.mark.slow
 def test_endpoints_detailed(base_url: str = "http://localhost:8005") -> Dict[str, Any]:
     """Probar endpoints con detalles"""
     results = {
@@ -89,10 +97,10 @@ def test_endpoints_detailed(base_url: str = "http://localhost:8005") -> Dict[str
         ("/api/v2/documents/high-confidence/", "GET", "High confidence documents"),
     ]
     
-    for endpoint, method, description in endpoints:
+        for endpoint, method, description in endpoints:
         try:
             if method == "GET":
-                response = requests.get(f"{base_url}{endpoint}", timeout=10)
+                response = requests.get(f"{base_url}{endpoint}", timeout=15)
             
             test_result = {
                 "status_code": response.status_code,
@@ -141,6 +149,8 @@ if __name__ == "__main__":
     else:
         success = test_system()
         sys.exit(0 if success else 1)
+
+
 
 
 

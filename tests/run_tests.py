@@ -50,7 +50,7 @@ def run_individual_tests() -> Dict[str, Any]:
     # Test del sistema optimizado
     print("🔄 Ejecutando test del sistema optimizado...")
     try:
-        from test_optimized_system import main as test_optimized_main
+        from tests.test_optimized_system import main as test_optimized_main
         results["optimized_system"] = {
             "success": test_optimized_main() == 0,
             "name": "Sistema Optimizado"
@@ -65,7 +65,7 @@ def run_individual_tests() -> Dict[str, Any]:
     # Test del sistema de producción
     print("🔄 Ejecutando test del sistema de producción...")
     try:
-        from test_production_system import test_system
+        from tests.test_production_system import test_system
         results["production_system"] = {
             "success": test_system(),
             "name": "Sistema de Producción"
@@ -228,6 +228,8 @@ def main():
 
 if __name__ == "__main__":
     exit(main())
+
+
 
 
 

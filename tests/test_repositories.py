@@ -10,9 +10,12 @@ from src.app.repositories.document_repository import DocumentRepository
 from src.app.models.document_unified import Document, DocumentType, DocumentStatus
 
 
+@pytest.mark.unit
+@pytest.mark.requires_db
 class TestDocumentRepository:
     """Tests para DocumentRepository"""
     
+    @pytest.mark.unit
     def test_create_document(self, document_repository, sample_document_data):
         """Test creación de documento"""
         document = document_repository.create(**sample_document_data)
@@ -242,6 +245,8 @@ class TestDocumentRepository:
         document_ids = [doc.id for doc in created_documents]
         deleted_count = document_repository.bulk_delete(document_ids)
         assert deleted_count == 3
+
+
 
 
 

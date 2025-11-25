@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from app.services.dni_extraction_service import DNIExtractionService, DNIData
 
+@pytest.mark.unit
 def test_dni_tarjeta_extraction():
     """Probar extracción de DNI tarjeta"""
     print("PROBANDO EXTRACCION DE DNI TARJETA")

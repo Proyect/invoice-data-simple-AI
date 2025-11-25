@@ -17,6 +17,8 @@ from app.services.academic_document_extraction_service import get_academic_extra
 from app.services.dni_extraction_service import get_dni_extraction_service
 from app.services.universal_validation_service import get_universal_validation_service
 
+@pytest.mark.e2e
+@pytest.mark.slow
 def simulate_document_upload_workflow():
     """Simular flujo completo de carga de documento"""
     print("SIMULANDO FLUJO COMPLETO DE CARGA DE DOCUMENTO")
@@ -278,6 +280,8 @@ if __name__ == "__main__":
         print(f"ERROR EN LOS TESTS E2E: {e}")
         import traceback
         traceback.print_exc()
+
+
 
 
 

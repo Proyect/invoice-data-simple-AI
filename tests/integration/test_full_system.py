@@ -16,6 +16,8 @@ from app.services.intelligent_extraction_service import get_intelligent_extracti
 from app.services.academic_document_extraction_service import get_academic_extraction_service
 from app.services.dni_extraction_service import get_dni_extraction_service
 
+@pytest.mark.integration
+@pytest.mark.slow
 def test_system_integration():
     """Probar integración completa del sistema"""
     print("PROBANDO INTEGRACION COMPLETA DEL SISTEMA")
@@ -233,6 +235,8 @@ if __name__ == "__main__":
         print(f"ERROR EN LOS TESTS: {e}")
         import traceback
         traceback.print_exc()
+
+
 
 
 

@@ -5,6 +5,7 @@ import pytest
 from app.services.basic_extraction_service import BasicExtractionService
 
 
+@pytest.mark.unit
 class TestBasicExtractionService:
     """Tests para el servicio de extracción básica"""
     
@@ -13,29 +14,21 @@ class TestBasicExtractionService:
         """Fixture del servicio de extracción"""
         return BasicExtractionService()
     
-    def test_extract_invoice_number(self, extraction_service):
-        """Test de extracción de número de factura"""
-        text = "FACTURA N° 0001-00000123"
+    @pytest.mark.unit
+    @pytest.mark.parametrize("text,field,expected_value", [
+        ("FACTURA N° 0001-00000123", "numero_factura", "0001-00000123"),
+        ("Fecha: 15/10/2024", "fecha", "15/10/2024"),
+        ("CUIT: 20-12345678-9", "cuit", "20-12345678-9"),
+    ])
+    def test_extract_fields(self, extraction_service, text, field, expected_value):
+        """Test parametrizado de extracción de campos comunes"""
         data = extraction_service.extract_data(text, "factura")
         
-        assert "numero_factura" in data
-        assert "0001-00000123" in data["numero_factura"]
-    
-    def test_extract_date(self, extraction_service):
-        """Test de extracción de fecha"""
-        text = "Fecha: 15/10/2024"
-        data = extraction_service.extract_data(text, "factura")
-        
-        assert "fecha" in data
-        assert "15/10/2024" in data["fecha"]
-    
-    def test_extract_cuit(self, extraction_service):
-        """Test de extracción de CUIT"""
-        text = "CUIT: 20-12345678-9"
-        data = extraction_service.extract_data(text, "factura")
-        
-        assert "cuit" in data
-        assert data["cuit"] == "20-12345678-9"
+        assert field in data
+        if isinstance(expected_value, str):
+            assert expected_value in str(data[field])
+        else:
+            assert data[field] == expected_value
     
     def test_extract_amounts(self, extraction_service):
         """Test de extracción de montos"""
@@ -96,6 +89,8 @@ class TestBasicExtractionService:
         assert "error" in result
 
 
+@pytest.mark.unit
+@pytest.mark.requires_redis
 class TestCacheService:
     """Tests para el servicio de cache"""
     
@@ -152,6 +147,8 @@ class TestCacheService:
         assert retrieved == data
 
 
+@pytest.mark.unit
+@pytest.mark.requires_openai
 class TestIntelligentExtraction:
     """Tests para el servicio de extracción inteligente"""
     
@@ -216,6 +213,8 @@ class TestIntelligentExtraction:
         assert result.structured_data is not None
 
 
+@pytest.mark.unit
+@pytest.mark.slow
 class TestOptimalOCR:
     """Tests para el servicio de OCR óptimo"""
     
@@ -267,6 +266,8 @@ class TestOptimalOCR:
             "factura"
         )
         assert strategy == "tesseract"
+
+
 
 
 

@@ -10,9 +10,12 @@ from src.app.models.document_unified import Document, DocumentType, DocumentStat
 from src.app.models.base import BaseModel, TimestampMixin, SoftDeleteMixin, MetadataMixin
 
 
+@pytest.mark.unit
+@pytest.mark.requires_db
 class TestDocumentModel:
     """Tests para el modelo Document"""
     
+    @pytest.mark.unit
     def test_document_creation(self, sample_document_data):
         """Test creación de documento"""
         document = Document(**sample_document_data)
@@ -57,6 +60,8 @@ class TestDocumentModel:
         sample_document.remove_tag("urgente")
         assert "urgente" not in sample_document.get_tags()
     
+    @pytest.mark.unit
+    @pytest.mark.requires_db
     def test_document_state_methods(self, sample_document, db_session):
         """Test métodos de estado"""
         # Test mark_processing
@@ -74,6 +79,8 @@ class TestDocumentModel:
         assert sample_document.status == DocumentStatus.FAILED.value
         assert sample_document.review_notes == "Error de procesamiento"
     
+    @pytest.mark.unit
+    @pytest.mark.requires_db
     def test_document_search_methods(self, sample_document, db_session):
         """Test métodos de búsqueda"""
         # Test search_by_text
@@ -91,6 +98,8 @@ class TestDocumentModel:
         assert len(results) >= 1
         assert sample_document in results
     
+    @pytest.mark.unit
+    @pytest.mark.requires_db
     def test_document_stats(self, sample_document, db_session):
         """Test estadísticas de documentos"""
         stats = Document.get_stats(db_session)
@@ -103,9 +112,11 @@ class TestDocumentModel:
         assert stats["total_documents"] >= 1
 
 
+@pytest.mark.unit
 class TestBaseModel:
     """Tests para el modelo base"""
     
+    @pytest.mark.unit
     def test_base_model_creation(self):
         """Test creación de modelo base"""
         # Crear una clase de prueba que herede de BaseModel
@@ -135,9 +146,11 @@ class TestBaseModel:
         assert "is_deleted" in model_dict
 
 
+@pytest.mark.unit
 class TestMixins:
     """Tests para los mixins"""
     
+    @pytest.mark.unit
     def test_timestamp_mixin(self):
         """Test TimestampMixin"""
         class TestModel(BaseModel, TimestampMixin):
@@ -180,9 +193,11 @@ class TestMixins:
         assert model.get_metadata() == expected
 
 
+@pytest.mark.unit
 class TestEnums:
     """Tests para los enums"""
     
+    @pytest.mark.unit
     def test_document_type_enum(self):
         """Test DocumentType enum"""
         assert DocumentType.FACTURA.value == "factura"
@@ -200,6 +215,8 @@ class TestEnums:
         assert OCRProvider.TESSERACT.value == "tesseract"
         assert OCRProvider.GOOGLE_VISION.value == "google_vision"
         assert OCRProvider.AWS_TEXTRACT.value == "aws_textract"
+
+
 
 
 
