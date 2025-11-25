@@ -13,7 +13,7 @@ from sqlalchemy import and_, or_, func, desc, asc, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .base_repository import BaseRepository
-from ..models.document_unified import Document, DocumentType, DocumentStatus, OCRProvider
+from ..models.document import Document  # Usar el modelo básico de document.py
 from ..services.cache_optimized import cached, cache_invalidate
 
 logger = logging.getLogger(__name__)

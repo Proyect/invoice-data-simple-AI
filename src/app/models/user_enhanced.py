@@ -118,11 +118,28 @@ class User(Base):
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
     
-    # Índices compuestos
+    # Índices compuestos optimizados
     __table_args__ = (
+        # Índices para filtrado por organización y rol
         Index('ix_users_org_role', 'organization_id', 'role'),
+        Index('ix_users_org_status', 'organization_id', 'status'),
+        Index('ix_users_org_active', 'organization_id', 'is_deleted'),
+        
+        # Índices para filtrado por estado
         Index('ix_users_status_created', 'status', 'created_at'),
+        Index('ix_users_status_active', 'status', 'is_deleted'),
+        Index('ix_users_active_deleted', 'is_deleted', 'created_at'),
+        
+        # Índices para autenticación
         Index('ix_users_provider_external', 'auth_provider', 'external_id'),
+        Index('ix_users_email_active', 'email', 'is_deleted'),
+        Index('ix_users_username_active', 'username', 'is_deleted'),
+        
+        # Índices para actividad
+        Index('ix_users_last_login', 'last_login'),
+        Index('ix_users_last_activity', 'last_activity'),
+        
+        # Constraint único para OAuth
         UniqueConstraint('auth_provider', 'external_id', name='uq_user_provider_external'),
     )
     
@@ -130,17 +147,58 @@ class User(Base):
     def validate_email(self, key, email):
         """Validar formato de email"""
         import re
-        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        if not email or not isinstance(email, str):
+            raise ValueError("email no puede estar vacío")
+        email = email.strip().lower()
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(pattern, email):
             raise ValueError("Formato de email inválido")
-        return email.lower()
+        if len(email) > 255:
+            raise ValueError("email excede la longitud máxima")
+        return email
     
     @validates('username')
     def validate_username(self, key, username):
         """Validar formato de username"""
         import re
+        if not username or not isinstance(username, str):
+            raise ValueError("username no puede estar vacío")
+        username = username.strip()
         if not re.match(r'^[a-zA-Z0-9_-]{3,30}$', username):
             raise ValueError("Username debe tener 3-30 caracteres alfanuméricos, guiones o guiones bajos")
+        # Validar que no empiece con guión
+        if username.startswith('-') or username.startswith('_'):
+            raise ValueError("Username no puede empezar con guión o guión bajo")
         return username.lower()
+    
+    @validates('phone')
+    def validate_phone(self, key, value):
+        """Validar formato de teléfono"""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("phone debe ser una cadena de texto")
+        # Remover espacios y caracteres especiales para validación
+        cleaned = ''.join(filter(str.isdigit, value))
+        if len(cleaned) < 7 or len(cleaned) > 15:
+            raise ValueError("phone debe tener entre 7 y 15 dígitos")
+        return value
+    
+    @validates('timezone')
+    def validate_timezone(self, key, value):
+        """Validar timezone"""
+        if not value:
+            return 'UTC'
+        # Lista básica de timezones comunes
+        common_timezones = [
+            'UTC', 'America/New_York', 'America/Chicago', 'America/Denver',
+            'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Europe/Madrid',
+            'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'
+        ]
+        # Validación básica (en producción usar pytz o zoneinfo)
+        if '/' in value or value in common_timezones:
+            return value
+        return 'UTC'  # Default seguro
     
     @hybrid_property
     def is_active(self):
@@ -178,6 +236,35 @@ class User(Base):
         if not self.password_changed_at:
             return True
         return (datetime.utcnow() - self.password_changed_at).days > 90
+    
+    @hybrid_property
+    def average_processing_time(self):
+        """Tiempo promedio de procesamiento por documento"""
+        if self.documents_processed > 0 and self.total_processing_time > 0:
+            return self.total_processing_time / self.documents_processed
+        return None
+    
+    @hybrid_property
+    def inactivity_days(self):
+        """Días de inactividad"""
+        if self.last_activity:
+            return (datetime.utcnow() - self.last_activity).days
+        elif self.last_login:
+            return (datetime.utcnow() - self.last_login).days
+        return None
+    
+    @hybrid_property
+    def is_inactive(self):
+        """Indica si el usuario está inactivo (más de 30 días)"""
+        inactivity = self.inactivity_days
+        return inactivity is not None and inactivity > 30
+    
+    @hybrid_property
+    def account_age_days(self):
+        """Edad de la cuenta en días"""
+        if self.created_at:
+            return (datetime.utcnow() - self.created_at).days
+        return None
     
     def to_dict(self, include_sensitive=False) -> Dict[str, Any]:
         """Convierte el usuario a diccionario"""
@@ -277,31 +364,154 @@ class User(Base):
         self.total_processing_time += processing_time
         self.last_document_processed = datetime.utcnow()
     
-    def can_process_more_documents(self) -> bool:
+    def can_process_more_documents(self, session=None) -> bool:
         """Verifica si puede procesar más documentos según límites"""
         if not self.daily_document_limit and not self.monthly_document_limit:
             return True
         
+        if not session:
+            # Sin sesión, asumir que puede procesar
+            return True
+        
+        from sqlalchemy import and_, func
+        from .document_enhanced import Document, DocumentStatus
+        
         # Verificar límite diario
         if self.daily_document_limit:
             today = datetime.utcnow().date()
-            # Aquí necesitarías contar documentos procesados hoy
-            # daily_count = session.query(Document).filter(...).count()
-            # if daily_count >= self.daily_document_limit:
-            #     return False
+            daily_count = session.query(Document).filter(
+                and_(
+                    Document.user_id == self.id,
+                    func.date(Document.created_at) == today,
+                    Document.status.in_([DocumentStatus.PROCESSED, DocumentStatus.APPROVED])
+                )
+            ).count()
+            if daily_count >= self.daily_document_limit:
+                return False
         
         # Verificar límite mensual
         if self.monthly_document_limit:
-            # Similar lógica para límite mensual
-            pass
+            from datetime import date
+            first_day_month = date.today().replace(day=1)
+            monthly_count = session.query(Document).filter(
+                and_(
+                    Document.user_id == self.id,
+                    func.date(Document.created_at) >= first_day_month,
+                    Document.status.in_([DocumentStatus.PROCESSED, DocumentStatus.APPROVED])
+                )
+            ).count()
+            if monthly_count >= self.monthly_document_limit:
+                return False
         
         return True
+    
+    def check_storage_limit(self, additional_mb: float = 0, session=None) -> bool:
+        """Verifica si puede usar más almacenamiento"""
+        if not self.storage_limit_mb:
+            return True
+        
+        if not session:
+            return True
+        
+        from sqlalchemy import func
+        from .document_enhanced import Document
+        
+        # Calcular almacenamiento actual
+        total_size = session.query(
+            func.sum(Document.file_size)
+        ).filter(
+            Document.user_id == self.id,
+            Document.is_deleted == False
+        ).scalar() or 0
+        
+        total_mb = (total_size / (1024 * 1024)) + additional_mb
+        return total_mb <= self.storage_limit_mb
+    
+    def get_usage_stats(self, session=None) -> Dict[str, Any]:
+        """Obtiene estadísticas de uso del usuario"""
+        if not session:
+            return {}
+        
+        from sqlalchemy import func
+        from .document_enhanced import Document, DocumentStatus
+        
+        stats = {
+            "total_documents": session.query(Document).filter(
+                Document.user_id == self.id,
+                Document.is_deleted == False
+            ).count(),
+            "processed_documents": session.query(Document).filter(
+                Document.user_id == self.id,
+                Document.status.in_([DocumentStatus.PROCESSED, DocumentStatus.APPROVED]),
+                Document.is_deleted == False
+            ).count(),
+            "pending_documents": session.query(Document).filter(
+                Document.user_id == self.id,
+                Document.status == DocumentStatus.UPLOADED,
+                Document.is_deleted == False
+            ).count(),
+            "total_storage_mb": 0,
+            "average_confidence": None,
+        }
+        
+        # Calcular almacenamiento
+        total_size = session.query(func.sum(Document.file_size)).filter(
+            Document.user_id == self.id,
+            Document.is_deleted == False
+        ).scalar() or 0
+        stats["total_storage_mb"] = total_size / (1024 * 1024)
+        
+        # Calcular confianza promedio
+        avg_conf = session.query(func.avg(Document.confidence_score)).filter(
+            Document.user_id == self.id,
+            Document.confidence_score.isnot(None),
+            Document.is_deleted == False
+        ).scalar()
+        stats["average_confidence"] = float(avg_conf) if avg_conf else None
+        
+        return stats
     
     def soft_delete(self):
         """Eliminación lógica del usuario"""
         self.is_deleted = True
         self.deleted_at = datetime.utcnow()
         self.status = UserStatus.INACTIVE
+    
+    def restore(self):
+        """Restaura un usuario eliminado lógicamente"""
+        self.is_deleted = False
+        self.deleted_at = None
+        if self.status == UserStatus.INACTIVE:
+            self.status = UserStatus.ACTIVE
+    
+    def suspend(self, reason: str = None):
+        """Suspende al usuario"""
+        self.status = UserStatus.SUSPENDED
+        if reason:
+            # Guardar razón en preferences o crear campo específico
+            if not self.preferences:
+                self.preferences = {}
+            self.preferences['suspension_reason'] = reason
+    
+    def activate(self):
+        """Activa al usuario"""
+        if self.status in [UserStatus.PENDING, UserStatus.INACTIVE]:
+            self.status = UserStatus.ACTIVE
+            self.is_verified = True
+    
+    def verify_email(self):
+        """Marca el email como verificado"""
+        self.is_verified = True
+        self.email_verified_at = datetime.utcnow()
+    
+    def verify_phone(self):
+        """Marca el teléfono como verificado"""
+        self.phone_verified_at = datetime.utcnow()
+    
+    def update_password(self, new_hashed_password: str):
+        """Actualiza la contraseña"""
+        self.hashed_password = new_hashed_password
+        self.password_changed_at = datetime.utcnow()
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role.value}')>"
@@ -438,6 +648,8 @@ class AuditLog(Base):
         Index('ix_audit_action_resource', 'action', 'resource_type'),
         Index('ix_audit_user_created', 'user_id', 'created_at'),
     )
+
+
 
 
 

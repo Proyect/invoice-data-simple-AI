@@ -15,5 +15,5 @@ from .uploads import router as uploads_router
 from .health import router as health_router
 
 api_router.include_router(documents_router, prefix="/documents", tags=["Documents v1"])
-api_router.include_router(uploads_router, prefix="/uploads", tags=["Uploads v1"])
+api_router.include_router(uploads_router, prefix="", tags=["Uploads v1"])  # Sin prefijo para que los endpoints sean /api/v1/upload directamente
 api_router.include_router(health_router, prefix="/health", tags=["Health v1"])

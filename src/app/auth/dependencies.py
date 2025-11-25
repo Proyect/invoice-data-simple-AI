@@ -150,6 +150,53 @@ async def get_optional_current_user(
         return None
 
 
+def get_user_permissions(user: User) -> list[str]:
+    """
+    Obtener permisos del usuario basados en su rol y configuración
+    
+    Args:
+        user: Usuario
+        
+    Returns:
+        Lista de permisos del usuario
+    """
+    permissions = []
+    
+    # Admins tienen todos los permisos
+    if user.is_admin:
+        return ["*"]  # "*" significa todos los permisos
+    
+    # Permisos básicos para todos los usuarios activos
+    if user.is_active:
+        permissions.extend([
+            "documents:read",
+            "documents:create",
+            "documents:update:own",
+            "documents:delete:own"
+        ])
+    
+    # Si el usuario está verificado, tiene permisos adicionales
+    if user.is_verified:
+        permissions.extend([
+            "documents:export",
+            "documents:share"
+        ])
+    
+    # Leer permisos adicionales desde profile_data si existe
+    if user.profile_data:
+        try:
+            import json
+            profile = json.loads(user.profile_data)
+            if isinstance(profile, dict):
+                additional_permissions = profile.get("permissions", [])
+                if isinstance(additional_permissions, list):
+                    permissions.extend(additional_permissions)
+        except Exception as e:
+            logger.warning(f"Error parseando permisos de profile_data para usuario {user.username}: {e}")
+    
+    return list(set(permissions))  # Eliminar duplicados
+
+
 def require_permissions(required_permissions: list[str]):
     """
     Decorador para requerir permisos específicos
@@ -161,16 +208,27 @@ def require_permissions(required_permissions: list[str]):
         Dependencia de FastAPI
     """
     async def permission_checker(current_user: User = Depends(get_current_active_user)):
-        # Por ahora, solo verificamos si es admin
-        # En el futuro se puede implementar un sistema de permisos más granular
-        if not current_user.is_admin:
-            user_permissions = []  # TODO: Implementar permisos de usuario
-            if not any(perm in user_permissions for perm in required_permissions):
-                logger.warning(f"Usuario {current_user.username} sin permisos: {required_permissions}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permisos requeridos: {', '.join(required_permissions)}"
-                )
+        user_permissions = get_user_permissions(current_user)
+        
+        # Si el usuario tiene permiso "*", tiene todos los permisos
+        if "*" in user_permissions:
+            return current_user
+        
+        # Verificar si el usuario tiene todos los permisos requeridos
+        missing_permissions = [
+            perm for perm in required_permissions
+            if perm not in user_permissions
+        ]
+        
+        if missing_permissions:
+            logger.warning(
+                f"Usuario {current_user.username} sin permisos requeridos: {missing_permissions}. "
+                f"Permisos del usuario: {user_permissions}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permisos requeridos: {', '.join(missing_permissions)}"
+            )
         
         return current_user
     

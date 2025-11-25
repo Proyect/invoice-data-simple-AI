@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Index, func, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Index, func, JSON, Float, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from ..core.database import Base
 from ..core.config import settings
@@ -13,6 +13,12 @@ class Document(Base):
     file_size = Column(Integer, nullable=True)
     mime_type = Column(String(100), nullable=True)
     
+    # Columnas requeridas por la base de datos (NOT NULL)
+    status = Column(String(50), nullable=False, default="pending", server_default="pending")
+    priority = Column(Integer, nullable=False, default=5, server_default="5")
+    language = Column(String(10), nullable=False, default="es", server_default="es")
+    is_deleted = Column(Boolean, nullable=False, default=False, server_default="false")
+    
     # Datos extraídos - JSON para SQLite, JSONB para PostgreSQL
     raw_text = Column(Text, nullable=True)
     # Usar JSONB para PostgreSQL (avanzado), JSON para SQLite
@@ -21,7 +27,7 @@ class Document(Base):
     
     # Metadatos de procesamiento
     ocr_provider = Column(String(50), nullable=True)
-    ocr_cost = Column(String(20), nullable=True)
+    ocr_cost = Column(Float, nullable=True)  # Cambiado a Float para coincidir con la base de datos (double precision)
     processing_time = Column(String(20), nullable=True)
     
     # Búsqueda full-text (solo PostgreSQL, SQLite no soporta TSVECTOR)
@@ -30,8 +36,8 @@ class Document(Base):
     #     search_vector = Column(TSVECTOR, nullable=True)
     
     # Metadatos
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # Índices básicos para SQLite (temporalmente simplificado para tests)
     __table_args__ = (

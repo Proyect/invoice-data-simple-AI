@@ -15,15 +15,16 @@ from typing import Optional, List
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Servicios
-processing_service = AsyncProcessingService()
+# Servicios - Ahora usando Dependency Injection
+from ..core.dependencies import get_async_processing_service
 
 @router.post("/upload-optimized", response_model=ExtractedDataResponse)
 async def upload_document_optimized(
     file: UploadFile = File(...),
     document_type: Optional[str] = Query(None, description="Tipo de documento (factura, recibo, contrato, formulario)"),
     background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    processing_service: AsyncProcessingService = Depends(get_async_processing_service)
 ):
     """
     Sube documento y procesa con estrategia optimizada

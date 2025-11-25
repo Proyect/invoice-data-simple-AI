@@ -5,6 +5,7 @@ Document Endpoints v2
 Endpoints optimizados para gestión de documentos.
 """
 import logging
+import asyncio
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
@@ -44,20 +45,38 @@ async def list_documents(
         
         if document_type or status:
             # Búsqueda con filtros
-            documents = await repository.advanced_search(
-                document_type=document_type,
-                status=status,
-                skip=skip,
-                limit=limit
-            )
-            total = await repository.count(
-                document_type=document_type,
-                status=status
-            )
+            if hasattr(repository, 'advanced_search') and callable(getattr(repository, 'advanced_search', None)):
+                documents = await repository.advanced_search(
+                    document_type=document_type,
+                    status=status,
+                    skip=skip,
+                    limit=limit
+                ) if asyncio.iscoroutinefunction(repository.advanced_search) else repository.advanced_search(
+                    document_type=document_type,
+                    status=status,
+                    skip=skip,
+                    limit=limit
+                )
+            else:
+                # Búsqueda simple con filtros
+                query = db.query(repository.model)
+                if document_type:
+                    query = query.filter(repository.model.document_type == document_type)
+                if status:
+                    query = query.filter(repository.model.status == status)
+                documents = query.offset(skip).limit(limit).all()
+            
+            # Contar total
+            query = db.query(repository.model)
+            if document_type:
+                query = query.filter(repository.model.document_type == document_type)
+            if status:
+                query = query.filter(repository.model.status == status)
+            total = query.count()
         else:
             # Lista simple
-            documents = await repository.get_all(skip=skip, limit=limit)
-            total = await repository.count()
+            documents = repository.get_all(skip=skip, limit=limit)
+            total = repository.count()
         
         # Calcular paginación
         total_pages = (total + limit - 1) // limit

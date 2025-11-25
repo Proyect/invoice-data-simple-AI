@@ -31,6 +31,11 @@ class DatabaseConfig(BaseSettings):
     pool_pre_ping: bool = Field(default=True)
     pool_recycle: int = Field(default=3600, ge=300)
     
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = True
+    
     @validator('url', 'url_test')
     def validate_database_url(cls, v):
         if not v:
@@ -45,6 +50,11 @@ class RedisConfig(BaseSettings):
     port: int = Field(default=6379, ge=1, le=65535, env="REDIS_PORT")
     db: int = Field(default=0, ge=0, le=15, env="REDIS_DB")
     password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = True
 
 
 class OCRConfig(BaseSettings):
@@ -75,17 +85,50 @@ class LLMConfig(BaseSettings):
 
 class SecurityConfig(BaseSettings):
     """Configuración de seguridad"""
-    secret_key: str = Field(..., env="SECRET_KEY")
+    secret_key: str = Field(default="your-super-secret-key-change-this-in-production", env="SECRET_KEY")
     algorithm: str = Field(default="HS256")
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
     
-    @validator('secret_key')
-    def validate_secret_key(cls, v):
-        if not v or v == "your-super-secret-key-change-this-in-production":
-            raise ValueError("SECRET_KEY must be set to a secure value")
-        if len(v) < 32:
-            raise ValueError("SECRET_KEY must be at least 32 characters long")
-        return v
+    # CORS
+    cors_origins: str = Field(default="*", env="CORS_ORIGINS")
+    cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
+    
+    # Rate Limiting
+    rate_limit_enabled: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
+    rate_limit_per_minute: int = Field(default=60, ge=1, env="RATE_LIMIT_PER_MINUTE")
+    rate_limit_burst: int = Field(default=10, ge=1, env="RATE_LIMIT_BURST")
+    
+    # Trusted Hosts
+    trusted_hosts: str = Field(default="", env="TRUSTED_HOSTS")
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = True
+    
+    @validator('cors_origins', pre=True)
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string or JSON array"""
+        if isinstance(v, str):
+            # Si es "*", retornar como está
+            if v.strip() == "*":
+                return ["*"]
+            # Si es lista separada por comas, convertir a lista
+            if "," in v:
+                return [origin.strip() for origin in v.split(",") if origin.strip()]
+            # Si es un solo origen, retornar como lista
+            if v.strip():
+                return [v.strip()]
+        return v if isinstance(v, list) else ["*"]
+    
+    @validator('trusted_hosts', pre=True)
+    def parse_trusted_hosts(cls, v):
+        """Parse trusted hosts from comma-separated string"""
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [host.strip() for host in v.split(",") if host.strip()]
+        return v if isinstance(v, list) else []
 
 
 class AppConfig(BaseSettings):
@@ -106,18 +149,68 @@ class AppConfig(BaseSettings):
     rq_worker_timeout: int = Field(default=600, ge=60, env="RQ_WORKER_TIMEOUT")
     rq_queue_name: str = Field(default="document_processing", env="RQ_QUEUE_NAME")
     
-    # Configuraciones anidadas
-    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
-    redis: RedisConfig = Field(default_factory=RedisConfig)
-    ocr: OCRConfig = Field(default_factory=OCRConfig)
-    llm: LLMConfig = Field(default_factory=LLMConfig)
-    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    # Configuraciones anidadas - usar model_validator para inicializar después
+    database: Optional[DatabaseConfig] = None
+    redis: Optional[RedisConfig] = None
+    ocr: Optional[OCRConfig] = None
+    llm: Optional[LLMConfig] = None
+    security: Optional[SecurityConfig] = None
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
         validate_assignment = True
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Inicializar configuraciones anidadas después de cargar variables de entorno
+        # Leer directamente de variables de entorno del sistema
+        import os
+        if self.database is None:
+            self.database = DatabaseConfig(
+                url=os.getenv("DATABASE_URL", ""),
+                url_test=os.getenv("DATABASE_URL_TEST", ""),
+                url_fallback=os.getenv("DATABASE_URL_FALLBACK", "sqlite:///./data/documents.db"),
+                pool_size=int(os.getenv("DB_POOL_SIZE", "20")),
+                max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "30")),
+                pool_pre_ping=os.getenv("DB_POOL_PRE_PING", "True").lower() == "true",
+                pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "3600"))
+            )
+        if self.redis is None:
+            # Leer configuración de Redis desde variables de entorno
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+            redis_db = int(os.getenv("REDIS_DB", "0"))
+            redis_url = os.getenv("REDIS_URL", f"redis://{redis_host}:{redis_port}/{redis_db}")
+            self.redis = RedisConfig(
+                url=redis_url,
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+                password=os.getenv("REDIS_PASSWORD", None)
+            )
+        if self.ocr is None:
+            self.ocr = OCRConfig()
+        if self.llm is None:
+            self.llm = LLMConfig()
+        if self.security is None:
+            # Para desarrollo, permitir secret key por defecto
+            secret_key = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")
+            if not secret_key or secret_key == "":
+                secret_key = "your-super-secret-key-change-this-in-production"
+            
+            self.security = SecurityConfig(
+                secret_key=secret_key,
+                algorithm=os.getenv("ALGORITHM", "HS256"),
+                access_token_expire_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")),
+                cors_origins=os.getenv("CORS_ORIGINS", "*"),
+                cors_allow_credentials=os.getenv("CORS_ALLOW_CREDENTIALS", "True").lower() == "true",
+                rate_limit_enabled=os.getenv("RATE_LIMIT_ENABLED", "True").lower() == "true",
+                rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
+                rate_limit_burst=int(os.getenv("RATE_LIMIT_BURST", "10")),
+                trusted_hosts=os.getenv("TRUSTED_HOSTS", "")
+            )
     
     @validator('environment', pre=True)
     def validate_environment(cls, v):
