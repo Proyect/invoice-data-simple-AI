@@ -410,7 +410,7 @@ echo "   • verify_deploy.py - Script de verificación"
 echo "   • .gitignore - Archivos a ignorar"
 echo ""
 echo "📚 DOCUMENTACIÓN COMPLETA:"
-echo "   • guia_deploy_completa.md - Guía paso a paso detallada"
+echo "   • README.md - Guía principal del proyecto"
 echo ""
 echo "🎉 ¡PREPARACIÓN COMPLETADA!"
 echo "   Tiempo estimado para completar deploy: 30-45 minutos"
@@ -431,6 +431,8 @@ fi
 
 echo ""
 echo "✨ Deploy preparation completed successfully!"
+
+
 
 
 

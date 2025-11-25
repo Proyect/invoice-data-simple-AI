@@ -17,10 +17,16 @@ services:
     environment:
       - DEBUG=True
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/document_extractor
+      - DATABASE_URL_TEST=postgresql://postgres:postgres@postgres:5432/document_extractor_test
+      - DATABASE_URL_FALLBACK=sqlite:///./data/documents.db
       - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - PORT=8005
       - HOST=0.0.0.0
+      - SECRET_KEY=local-development-key-change-in-production-32-chars-minimum-required
+      - ENVIRONMENT=development
     depends_on:
       - postgres
       - redis
@@ -69,8 +75,14 @@ services:
       - ./outputs:/app/outputs
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/document_extractor
+      - DATABASE_URL_TEST=postgresql://postgres:postgres@postgres:5432/document_extractor_test
+      - DATABASE_URL_FALLBACK=sqlite:///./data/documents.db
       - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - SECRET_KEY=local-development-key-change-in-production-32-chars-minimum-required
+      - ENVIRONMENT=development
     depends_on:
       - postgres
       - redis
