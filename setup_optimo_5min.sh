@@ -4,7 +4,7 @@
 # Configuración del stack ganador: Supabase + Upstash + Google Vision + OpenAI
 
 echo "🏆 Configurando el stack ÓPTIMO para Document Extractor..."
-echo "📊 Basado en análisis de 40+ servicios (ver analisis_servicios_optimo.md)"
+echo "📊 Basado en análisis de 40+ servicios"
 echo ""
 
 # Copiar configuración óptima
@@ -244,6 +244,8 @@ echo ""
 echo "💰 ROI: 10-50x más económico que alternativas comerciales"
 echo "⚡ Performance: 3-8 segundos por documento"
 echo "🎯 Precisión: 90-95% end-to-end"
+
+
 
 
 

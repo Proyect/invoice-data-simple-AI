@@ -1,637 +1,412 @@
 # Manual para Desarrolladores
 
-## Visión General
-Este proyecto implementa una API completa de extracción y gestión de documentos basada en FastAPI, con OCR, extracción inteligente, validación, autenticación JWT, base de datos SQL (SQLite/PostgreSQL), cache con Redis y procesamiento asíncrono.
+Guía técnica para desarrolladores que trabajan en el proyecto.
 
-- Backend: `src/app/`
-- Frontend: `frontend/`
-- Infra: Docker y Docker Compose
+## 📐 Arquitectura
 
-## Arquitectura
-- `src/app/core/`: configuración (`config.py`), base de datos (`database.py`)
-- `src/app/auth/`: autenticación y dependencias (`jwt_handler.py`, `password_handler.py`, `dependencies.py`)
-- `src/app/models/`: modelos ORM de SQLAlchemy (`document.py`, `user.py`, variantes enhanced)
-- `src/app/schemas/`: Pydantic v2 para validación/DTO
-- `src/app/services/`: lógica de negocio (OCR, extracción inteligente, validación, async, cache)
-- `src/app/routes/`: routers FastAPI por dominio (documentos, uploads, auth)
-- `src/app/main.py`: inicialización de la app y registro
+### Estructura del Código
 
-## Requisitos
-- Python 3.13
-- (Opcional) Tesseract OCR instalado y en PATH
-- (Opcional) Redis para cache/colas
-- (Opcional) PostgreSQL para producción
+```
+src/app/
+├── core/              # Configuración central
+│   ├── config.py      # Settings con pydantic-settings
+│   ├── database.py    # Conexión DB (PostgreSQL/SQLite)
+│   ├── environment.py # Gestión de ambientes
+│   └── logging_config.py
+├── models/            # Modelos SQLAlchemy ORM
+│   ├── document_enhanced.py
+│   ├── user_enhanced.py
+│   └── ...
+├── schemas/           # Esquemas Pydantic v2 (validación/DTO)
+│   ├── document_consolidated.py
+│   └── ...
+├── services/          # Lógica de negocio
+│   ├── optimal_ocr_service.py
+│   ├── intelligent_extraction_service.py
+│   ├── afip_invoice_extraction_service.py
+│   ├── academic_document_extraction_service.py
+│   └── ...
+├── repositories/      # Capa de acceso a datos (Repository Pattern)
+│   └── document_repository.py
+├── api/               # Endpoints organizados por versión
+│   ├── v1/            # API Legacy (mantenimiento)
+│   └── v2/            # API Actual (recomendada)
+├── routes/            # Endpoints legacy (deprecar gradualmente)
+├── auth/              # Autenticación JWT
+│   ├── jwt_handler.py
+│   ├── password_handler.py
+│   └── dependencies.py
+└── middleware/        # Middleware personalizado
+    ├── error_handler.py
+    ├── performance.py
+    └── security.py
+```
 
-## Configuración
-Variables gestionadas con `pydantic-settings` en `src/app/core/config.py`. Crear `.env` (puedes copiar `env.example`).
+### Patrones de Diseño
 
-Claves relevantes:
-- `DATABASE_URL` (PostgreSQL) y `DATABASE_URL_FALLBACK` (SQLite)
-- `SECRET_KEY`, `ALGORITHM`, expiraciones de tokens
-- Redis: `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`
-- OCR/LLM: `TESSERACT_CMD`, `OPENAI_API_KEY`, `AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`
+- **Repository Pattern**: Abstracción de acceso a datos
+- **Service Layer**: Lógica de negocio separada
+- **Dependency Injection**: FastAPI dependencies
+- **Strategy Pattern**: Múltiples servicios OCR/extracción
 
-## Instalación
+## 🔧 Configuración Avanzada
+
+### Variables de Entorno Completas
+
+```env
+# Base de datos
+DATABASE_URL=postgresql://user:pass@host:5432/db
+DATABASE_URL_FALLBACK=sqlite:///./data/documents.db
+DB_POOL_SIZE=20
+DB_MAX_OVERFLOW=30
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+# OCR
+TESSERACT_CMD=/usr/bin/tesseract
+GOOGLE_VISION_DAILY_LIMIT=200
+AWS_TEXTRACT_DAILY_LIMIT=100
+
+# LLM
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MAX_TOKENS=1000
+
+# Seguridad
+SECRET_KEY=...
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Procesamiento asíncrono
+RQ_WORKER_TIMEOUT=600
+RQ_QUEUE_NAME=document_processing
+```
+
+### Ambientes
+
+El sistema soporta tres ambientes:
+- **development**: Debug activado, CORS abierto
+- **testing**: Configuración para tests
+- **production**: Seguridad reforzada, CORS restringido
+
+## 💻 Desarrollo Local
+
+### Setup Inicial
+
 ```bash
+# 1. Clonar y entrar al proyecto
+cd invoice-data-simple-AI
+
+# 2. Crear entorno virtual
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+
+# 3. Instalar dependencias
 pip install -r requirements.txt
-```
 
-## Base de Datos y Migraciones
-- Dev por defecto: SQLite en `data/documents.db` (auto-config).
-- Producción: usar `DATABASE_URL` con PostgreSQL.
-- Migraciones Alembic:
-```bash
-alembic revision -m "mi_cambio"
+# 4. Instalar modelo de spaCy
+python -m spacy download es_core_news_sm
+
+# 5. Configurar .env
+cp env.example .env
+# Editar .env
+
+# 6. Inicializar base de datos
 alembic upgrade head
-alembic downgrade -1
-```
 
-## Ejecución Local
-```bash
-python main.py
-# Docs: http://localhost:8005/docs
-```
-
-Con Docker Compose (API + Redis + Postgres + Frontend):
-```bash
-docker compose up --build
-```
-
-## Autenticación JWT
-- Archivos: `src/app/auth/jwt_handler.py`, `dependencies.py`, `password_handler.py`.
-- Flujo:
-  - `POST /auth/login` => devuelve `access_token` (corto) y `refresh_token` (largo).
-  - Rutas protegidas usan `Authorization: Bearer <access_token>`.
-  - Refresh para renovar tokens.
-
-## Servicios Clave
-- OCR: `optimal_ocr_service.py`, `specialized_ocr_service.py`, `basic_extraction_service.py`
-- Extracción Inteligente: `intelligent_extraction_service.py` (spaCy + OpenAI opcional)
-- Validación: `afip_validation_service.py`, `universal_validation_service.py`
-- Async: `async_processing_service.py` (procesamiento en background y actualización en DB)
-- Cache: `cache_service.py` (Redis con fallback seguro)
-
-## Endpoints Principales (Cheat‑Sheet)
-
-### Autenticación
-- POST `/auth/register` (opcional según configuración)
-- POST `/auth/login`
-  - Request:
-    ```json
-    { "email": "user@example.com", "password": "secret" }
-    ```
-  - Response:
-    ```json
-    {
-      "access_token": "...",
-      "refresh_token": "...",
-      "token_type": "bearer",
-      "expires_in": 1800
-    }
-    ```
-- POST `/auth/refresh`
-  - Header: `Authorization: Bearer <refresh_token>`
-  - Response: nuevo `access_token`
-
-### Subida y Procesamiento de Documentos
-- POST `/upload-optimized`
-  - Form-Data: `file` (UploadFile), `document_type` (opcional)
-  - Response ejemplo:
-    ```json
-    {
-      "document_type": "FACTURA",
-      "confidence": 0.92,
-      "entities": {"cuit_emisor": "30-12345678-9"},
-      "structured_data": {"total": 1234.56, "moneda": "ARS"},
-      "metadata": {"pages": 1}
-    }
-    ```
-- POST `/uploads` o `/simple-upload` según variantes (ver `src/app/routes/`)
-
-### Documentos
-- GET `/documents?skip=0&limit=10&search=texto`
-  - Response paginada con cache Redis
-
-## Testing y Validación
-
-### Tests Automatizados
-```bash
-# Ejecutar todos los tests
-pytest -q
-
-# Tests específicos
-pytest tests/test_documents.py -v
-pytest tests/test_services.py -v
-pytest tests/test_security.py -v
-pytest test_upload.py -v
-pytest test_specialized_ocr.py -v
-pytest test_universal_validation.py -v
-```
-
-### Validación Completa del Sistema
-```bash
-# Verificación completa (requiere servidor corriendo)
-python verificacion_sistema_completo.py
-
-# Validación final de producción
-python validacion_sistema_final.py
-
-# Validación básica
-python validacion_sistema_completo.py
-```
-
-### Tests de Endpoints Específicos
-```bash
-# Test de upload básico
-python test_upload.py
-
-# Test de OCR especializado
-python test_specialized_ocr.py
-
-# Test de validación universal
-python test_universal_validation.py
-```
-
-### Cobertura de Tests
-- **Rutas**: upload, documentos, autenticación
-- **Servicios**: OCR, extracción, validación, cache
-- **Seguridad**: JWT, contraseñas, permisos
-- **Integración**: base de datos, Redis, APIs externas
-- **Frontend**: funcionalidad básica
-
-## Buenas Prácticas
-- Rutas finas; lógica en `services`.
-- Validación con Pydantic v2 y respuestas tipadas.
-- Manejo de errores con `HTTPException` y logs.
-- Escribir tests al agregar features.
-- Mantener migraciones sincronizadas con modelos.
-
-## Casos de Uso Específicos
-
-### Procesamiento de Facturas AFIP
-```bash
-# Upload con detección automática AFIP
-curl -X POST "http://localhost:8005/upload-optimized" \
-  -F "file=@factura_afip.pdf" \
-  -F "document_type=FACTURA"
-
-# Validación específica AFIP
-curl -X POST "http://localhost:8005/api/v2/documents/123/process" \
-  -H "Content-Type: application/json" \
-  -d '{"ocr_provider": "tesseract", "extraction_method": "afip_specialized"}'
-```
-
-### Procesamiento por Lotes
-```bash
-# Múltiples documentos
-curl -X POST "http://localhost:8005/upload-batch" \
-  -F "files=@doc1.pdf" \
-  -F "files=@doc2.pdf" \
-  -F "document_type=FACTURA"
-
-# Operaciones en lote v2
-curl -X POST "http://localhost:8005/api/v2/documents/batch" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "document_ids": [1,2,3],
-    "operation": "update_status",
-    "parameters": {"status": "processed"}
-  }'
-```
-
-### Exportación de Datos
-```bash
-# Exportar a CSV
-curl -X POST "http://localhost:8005/api/v2/documents/export" \
-  -H "Content-Type: application/json" \
-  -d '{"format": "csv", "include_extracted_data": true}' \
-  -o "export.csv"
-
-# Exportar a JSON
-curl -X POST "http://localhost:8005/api/v2/documents/export" \
-  -H "Content-Type: application/json" \
-  -d '{"format": "json", "document_ids": [1,2,3]}'
-```
-
-## Extender el Sistema
-1. **Modelos**: Agrega/ajusta en `models/` y crea migraciones
-2. **Schemas**: Define/actualiza en `schemas/` con validaciones Pydantic v2
-3. **Servicios**: Implementa lógica de negocio en `services/`
-4. **Rutas**: Expón endpoints en `routes/` con autenticación apropiada
-5. **Tests**: Cubre con tests unitarios e integración en `tests/` y `test_*.py`
-6. **Validación**: Añade casos de prueba en scripts de validación del sistema
-
-## Administración del Sistema
-
-### Gestión de Usuarios
-```bash
-# Crear usuario administrador
+# 7. Crear usuario admin (opcional)
 python create_admin_user.py
-
-# Crear admin simple
-python create_simple_admin.py
-
-# Actualizar contraseña de admin
-python update_admin_password.py
 ```
 
-### Scripts de Utilidad
+### Workflow de Desarrollo
+
 ```bash
-# Crear facturas de prueba AFIP
-python create_afip_invoice_test.py
-python create_invoice_with_cae.py
-python create_realistic_afip_invoice.py
+# Iniciar servidor con hot-reload
+python main.py
+# O con uvicorn directamente
+uvicorn app.main:app --reload --port 8005
 
-# Crear documentos de prueba
-python create_test_documents.py
+# Ejecutar tests
+pytest tests/ -v
 
-# Validación end-to-end
-python validacion_sistema_completo.py
-python verificacion_sistema_completo.py
+# Ejecutar migraciones
+alembic revision -m "descripcion_cambio"
+alembic upgrade head
+
+# Ver logs
+tail -f logs/app.log
 ```
 
-### Monitoreo y Diagnóstico
+### Base de Datos y Migraciones
+
 ```bash
-# Verificar estado del sistema
-curl http://localhost:8005/health
-
-# Estadísticas de documentos
-curl http://localhost:8005/documents/stats
-
-# Estado de la cola de procesamiento
-curl http://localhost:8005/queue/stats
-
-# Test de OCR
-curl http://localhost:8005/upload/test
-```
-
-## Problemas Comunes
-
-### Base de Datos
-- **Postgres off**: fallback automático a SQLite
-- **Migraciones pendientes**: ejecutar `alembic upgrade head`
-- **Conexión rechazada**: verificar credenciales y host
-
-### Servicios Externos
-- **Redis off**: cache/async degradan con logs de advertencia
-- **Tesseract no instalado**: usar servicios de nube o configurar `TESSERACT_CMD`
-- **OpenAI/Cloud sin clave**: extracción inteligente funciona en modo reducido
-
-### OCR y Procesamiento
-- **Texto no extraído**: verificar calidad de imagen, instalar Tesseract
-- **Confianza baja**: ajustar umbrales en configuración
-- **Procesamiento lento**: usar métodos asíncronos para archivos grandes
-
-### Autenticación
-- **Token expirado**: usar refresh token o re-login
-- **Permisos insuficientes**: verificar roles de usuario
-- **Usuario no encontrado**: crear usuario con scripts de utilidad
-
-## Ejemplos cURL Detallados
-
-### Autenticación
-
-#### Login (OAuth2PasswordRequestForm)
-```bash
-curl -s -X POST "http://localhost:8005/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=user@example.com&password=secret"
-```
-
-#### Refresh token
-```bash
-curl -s -X POST "http://localhost:8005/auth/refresh" \
-  -H "Content-Type: application/json" \
-  -d '{"refresh_token":"<REFRESH_TOKEN>"}'
-```
-
-#### Obtener usuario actual
-```bash
-curl -s "http://localhost:8005/auth/me" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-### Documentos
-
-#### Listado con paginación y búsqueda
-```bash
-curl -s "http://localhost:8005/documents?skip=0&limit=10&search=factura" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-#### Búsqueda avanzada con ranking
-```bash
-curl -s "http://localhost:8005/documents/search?q=factura%20AFIP&limit=5"
-```
-
-#### Estadísticas de documentos
-```bash
-curl -s "http://localhost:8005/documents/stats"
-```
-
-#### Obtener documento específico
-```bash
-curl -s "http://localhost:8005/documents/123"
-```
-
-#### Obtener solo texto extraído
-```bash
-curl -s "http://localhost:8005/documents/123/text"
-```
-
-#### Obtener solo datos extraídos
-```bash
-curl -s "http://localhost:8005/documents/123/data"
-```
-
-#### Reprocesar documento
-```bash
-curl -s -X POST "http://localhost:8005/documents/123/reprocess?document_type=FACTURA"
-```
-
-### Subida de Documentos
-
-#### Upload optimizado (síncrono/asíncrono según tamaño)
-```bash
-curl -s -X POST "http://localhost:8005/upload-optimized" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -F "file=@./test_invoice.pdf" \
-  -F "document_type=FACTURA"
-```
-
-#### Upload asíncrono (siempre en background)
-```bash
-curl -s -X POST "http://localhost:8005/upload-async" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -F "file=@./large_document.pdf" \
-  -F "document_type=FACTURA"
-```
-
-#### Upload flexible con métodos específicos
-```bash
-curl -s -X POST "http://localhost:8005/upload-flexible" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -F "file=@./invoice.pdf" \
-  -F "document_type=FACTURA" \
-  -F "ocr_method=tesseract" \
-  -F "extraction_method=hybrid"
-```
-
-#### Upload simple (versión básica)
-```bash
-curl -s -X POST "http://localhost:8005/upload" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -F "file=@./document.pdf" \
-  -F "document_type=factura"
-```
-
-#### Upload múltiple en lote
-```bash
-curl -s -X POST "http://localhost:8005/upload-batch" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -F "files=@./doc1.pdf" \
-  -F "files=@./doc2.pdf" \
-  -F "document_type=FACTURA"
-```
-
-### Procesamiento Asíncrono
-
-#### Estado de trabajo
-```bash
-curl -s "http://localhost:8005/jobs/job_123/status"
-```
-
-#### Estadísticas de cola
-```bash
-curl -s "http://localhost:8005/queue/stats"
-```
-
-#### Reintentar trabajo fallido
-```bash
-curl -s -X POST "http://localhost:8005/jobs/job_123/retry"
-```
-
-### API v2 (Enhanced)
-
-#### Listado con filtros avanzados
-```bash
-curl -s "http://localhost:8005/api/v2/documents/?page=1&size=20&document_type=FACTURA&min_confidence=0.8&sort_by=created_at&sort_order=desc" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-#### Búsqueda avanzada POST
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/search" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "factura AFIP",
-    "document_type": "FACTURA",
-    "date_from": "2024-01-01T00:00:00Z",
-    "date_to": "2024-12-31T23:59:59Z",
-    "page": 1,
-    "size": 10
-  }'
-```
-
-#### Procesar documento específico
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/123/process" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "ocr_provider": "tesseract",
-    "extraction_method": "hybrid",
-    "force_reprocess": false,
-    "priority": 5
-  }'
-```
-
-#### Revisar documento
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/123/review" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "approve",
-    "review_notes": "Documento correcto",
-    "confidence_override": 0.95
-  }'
-```
-
-#### Operaciones en lote
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/batch" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "document_ids": [123, 124, 125],
-    "operation": "update_status",
-    "parameters": {"status": "processed"}
-  }'
-```
-
-#### Exportar documentos (JSON)
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/export" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "document_ids": [123, 124, 125],
-    "format": "json",
-    "include_extracted_data": true,
-    "include_raw_text": false
-  }'
-```
-
-#### Exportar documentos (CSV)
-```bash
-curl -s -X POST "http://localhost:8005/api/v2/documents/export" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "format": "csv",
-    "include_extracted_data": true
-  }' \
-  -o "documents_export.csv"
-```
-
-#### Estadísticas generales
-```bash
-curl -s "http://localhost:8005/api/v2/documents/stats/overview" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-### Utilidades
-
-#### Verificar métodos disponibles
-```bash
-curl -s "http://localhost:8005/upload-flexible/methods"
-```
-
-#### Test de OCR
-```bash
-curl -s "http://localhost:8005/upload/test"
-```
-
-## Playbook de Despliegue (Docker/Postgres/Redis)
-
-### Docker Compose básico
-```bash
-docker compose up --build -d
-docker compose logs -f api
-```
-
-### Variables de entorno clave
-- `DATABASE_URL=postgresql://postgres:postgres@db:5432/document_extractor`
-- `REDIS_HOST=redis`
-- `SECRET_KEY=<valor-seguro>`
-
-### Troubleshooting rápido
-- API no levanta (migraciones):
-  - Ejecuta `alembic upgrade head` dentro del contenedor API.
-- Conexión a Postgres rechazada:
-  - Verifica servicio `db` arriba: `docker compose ps` y logs: `docker compose logs db`.
-  - Revisa credenciales y nombre de host (`db`).
-- Redis no disponible:
-  - El sistema hace fallback; revisa logs y asegúrate de `REDIS_HOST=redis`.
-- Errores Tesseract:
-  - Instala `tesseract-ocr` en la imagen/base, o configura `TESSERACT_CMD`.
-- Problemas de permisos en `uploads/` o `outputs/`:
-  - Asegura volúmenes con permisos de escritura para el usuario del contenedor.
-
-### Comandos útiles dentro del contenedor API
-```bash
-# Abrir shell
-docker compose exec api bash
+# Crear nueva migración
+alembic revision -m "nombre_migracion"
 
 # Aplicar migraciones
 alembic upgrade head
 
-# Ejecutar tests
-pytest -q
+# Revertir última migración
+alembic downgrade -1
+
+# Ver historial
+alembic history
 ```
 
-## Índice de Endpoints por Router
+## 🧪 Testing
 
-Nota: Los códigos de estado indicados son los más comunes; algunos endpoints pueden devolver 4xx/5xx ante errores.
+### Ejecutar Tests
 
-### src/app/routes/auth.py
-- POST `/register` — público — 201 (crear usuario)
-- POST `/login` — público — 200 (tokens)
-- POST `/refresh` — público — 200 (nuevo access token)
-- GET `/me` — requiere Bearer — 200 (usuario actual)
-- PUT `/me` — requiere Bearer — 200 (actualiza usuario)
-- POST `/change-password` — requiere Bearer — 200
-- GET `/users?skip&limit` — requiere Bearer admin — 200
+```bash
+# Todos los tests
+pytest tests/ -v
 
-### src/app/routes/documents.py
-- GET `/documents?skip&limit&search` — requiere DB — 200 (lista paginada, cache)
-- GET `/documents/search?q&limit` — 200 (búsqueda avanzada; fallback SQLite)
-- GET `/documents/stats` — 200 (estadísticas; cache)
-- GET `/documents/{document_id}` — 200/404
-- DELETE `/documents/{document_id}` — 200/404 (invalida cache)
-- GET `/documents/{document_id}/text` — 200/404
-- GET `/documents/{document_id}/data` — 200/404
-- POST `/documents/{document_id}/reprocess?document_type` — 200 (lanza reproceso async)
+# Tests específicos
+pytest tests/unit/ -v
+pytest tests/integration/ -v
+pytest tests/e2e/ -v
 
-### src/app/routes/optimized_upload.py
-- POST `/upload-optimized?document_type` — 200 (procesa optimizado, sync/async según tamaño)
-- POST `/upload-async?document_type` — 200 (inicia job async)
-- GET `/jobs/{job_id}/status` — 200
-- GET `/queue/stats` — 200
-- POST `/jobs/{job_id}/retry` — 200/400
-- POST `/upload-batch?document_type` — 200 (subida múltiple)
+# Con cobertura
+pytest tests/ --cov=src/app --cov-report=html
 
-### src/app/routes/flexible_upload.py
-- POST `/upload-flexible` — 200 (selección de `ocr_method` y `extraction_method`)
-- GET `/upload-flexible/methods` — 200 (disponibilidad de métodos)
+# Test específico
+pytest tests/test_documents.py::test_create_document -v
+```
 
-### src/app/routes/simple_upload.py
-- POST `/upload` — 200 (versión simplificada)
-- POST `/upload-flexible` — 200 (flexible básico)
-- GET `/upload-flexible/methods` — 200
-- GET `/upload/test` — 200 (diagnóstico OCR/spaCy)
+### Estructura de Tests
 
-### src/app/routes/uploads.py
-- POST `/upload` — 200 (upload simple con OCR + extracción)
-- POST `/upload-flexible` — 200 (métodos auto/básico/inteligente)
+```
+tests/
+├── unit/              # Tests unitarios (componentes aislados)
+├── integration/       # Tests de integración (servicios combinados)
+├── e2e/               # Tests end-to-end (flujo completo)
+├── fixtures/          # Datos de prueba
+├── utils/             # Utilidades para tests
+└── conftest.py        # Configuración pytest
+```
 
-### src/app/routes/documents_enhanced.py (prefijo: `/api/v2/documents`)
-- POST `/` — 201 — requiere Bearer (crea documento)
-- GET `/{document_id}` — 200/404 — requiere Bearer
-- PUT `/{document_id}` — 200/404 — requiere Bearer
-- DELETE `/{document_id}` — 204/404 — requiere Bearer
-- GET `/` — 200 — requiere Bearer (listado con filtros/paginación)
-- POST `/search` — 200 — requiere Bearer (búsqueda avanzada)
-- POST `/{document_id}/process` — 200 — requiere Bearer (procesamiento)
-- POST `/{document_id}/review` — 200 — requiere Bearer (revisión)
-- POST `/batch` — 200 — requiere Bearer (operaciones en lote)
-- POST `/export` — 200 — requiere Bearer (JSON/CSV/XLSX)
-- GET `/stats/overview` — 200 — requiere Bearer
-- POST `/upload` — 201 — requiere Bearer (subida con auto-process opcional)
+## 📚 Referencia de Endpoints
 
-### src/app/routes/documents_enhanced_db.py
-- GET `/` — 200 (lista con paginación)
-- POST `/` — 200 (crear)
-- GET `/{document_id}` — 200/404
-- PUT `/{document_id}` — 200/404
-- DELETE `/{document_id}` — 200/404
-- POST `/search` — 200
-- GET `/stats/overview` — 200
-- POST `/{document_id}/process` — 200/404
-- POST `/batch` — 200
+### API v1 (Legacy)
 
-### src/app/routes/documents_enhanced_simple.py
-- GET `/` — 200 (mock)
-- POST `/` — 200 (mock)
-- GET `/{document_id}` — 200 (mock)
-- POST `/search` — 200 (mock)
-- POST `/{document_id}/process` — 200 (mock)
-- POST `/{document_id}/review` — 200 (mock)
-- POST `/batch` — 200 (mock)
-- POST `/export` — 200 (mock)
-- GET `/stats/overview` — 200 (mock)
-- PUT `/{document_id}` — 200 (mock)
-- POST `/upload` — 200 (mock)
-- DELETE `/{document_id}` — 200 (mock)
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/upload` | POST | Upload simple |
+| `/api/v1/upload-flexible` | POST | Upload con métodos seleccionables |
+| `/api/v1/documents` | GET | Listar documentos |
+| `/api/v1/documents/{id}` | GET | Obtener documento |
+| `/api/v1/health` | GET | Health check |
+
+### API v2 (Actual)
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v2/documents/` | GET | Listar con filtros |
+| `/api/v2/documents/` | POST | Crear documento |
+| `/api/v2/documents/{id}` | GET | Obtener documento |
+| `/api/v2/documents/{id}` | PUT | Actualizar documento |
+| `/api/v2/documents/{id}` | DELETE | Eliminar documento |
+| `/api/v2/documents/search` | POST | Búsqueda avanzada |
+| `/api/v2/documents/{id}/process` | POST | Procesar documento |
+| `/api/v2/documents/{id}/review` | POST | Revisar documento |
+| `/api/v2/documents/batch` | POST | Operaciones en lote |
+| `/api/v2/documents/export` | POST | Exportar documentos |
+| `/api/v2/documents/stats/overview` | GET | Estadísticas |
+| `/api/v2/uploads/` | POST | Subir archivo |
+
+### Autenticación
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/auth/register` | POST | Registrar usuario |
+| `/auth/login` | POST | Iniciar sesión |
+| `/auth/refresh` | POST | Renovar token |
+| `/auth/me` | GET | Usuario actual |
+
+## 🔨 Servicios Clave
+
+### OCR Services
+
+- **OptimalOCRService**: Selección automática del mejor OCR
+- **SpecializedOCRService**: OCR con preprocesamiento avanzado
+
+### Extraction Services
+
+- **BasicExtractionService**: Regex + spaCy básico
+- **IntelligentExtractionService**: LLM + NLP avanzado
+- **AFIPInvoiceExtractionService**: Especializado en facturas AFIP
+- **AcademicDocumentExtractionService**: Documentos académicos
+- **DNIExtractionService**: DNI argentinos
+
+### Validation Services
+
+- **UniversalValidationService**: Validación genérica
+- **AFIPValidationService**: Validación CAE AFIP
+
+## 🏗️ Agregar Nuevas Funcionalidades
+
+### 1. Agregar Nuevo Endpoint
+
+```python
+# En src/app/api/v2/nuevo_endpoint.py
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from ..core.database import get_db
+
+router = APIRouter()
+
+@router.get("/nuevo")
+async def nuevo_endpoint(db: Session = Depends(get_db)):
+    return {"message": "Nuevo endpoint"}
+```
+
+### 2. Agregar Nuevo Servicio
+
+```python
+# En src/app/services/nuevo_servicio.py
+class NuevoServicio:
+    def __init__(self):
+        pass
+    
+    def procesar(self, data):
+        # Lógica aquí
+        return resultado
+```
+
+### 3. Agregar Nuevo Modelo
+
+```python
+# En src/app/models/nuevo_modelo.py
+from ..core.database import Base
+from sqlalchemy import Column, Integer, String
+
+class NuevoModelo(Base):
+    __tablename__ = "nuevo_modelo"
+    
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(255))
+```
+
+Luego crear migración:
+```bash
+alembic revision -m "add_nuevo_modelo"
+alembic upgrade head
+```
+
+## 📝 Buenas Prácticas
+
+- **Rutas finas**: Lógica en servicios, no en endpoints
+- **Validación**: Usar Pydantic v2 para validación
+- **Manejo de errores**: HTTPException con mensajes claros
+- **Logging**: Usar logger en lugar de print
+- **Tests**: Escribir tests al agregar features
+- **Type hints**: Usar tipos en todas las funciones
+- **Docstrings**: Documentar funciones públicas
+
+## 🐛 Debugging
+
+### Ver Logs
+
+```bash
+# Logs de la aplicación
+tail -f logs/app.log
+
+# Logs de errores
+tail -f logs/error.log
+
+# Logs del sistema
+tail -f logs/system.log
+```
+
+### Debug en Código
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+logger.debug("Mensaje de debug")
+logger.info("Información")
+logger.warning("Advertencia")
+logger.error("Error")
+```
+
+## 🔍 Troubleshooting Técnico
+
+### Problemas Comunes
+
+**Import errors:**
+- Verificar que `src` esté en `PYTHONPATH`
+- Verificar estructura de imports relativos
+
+**Database errors:**
+- Verificar conexión: `python -c "from src.app.core.database import create_database_engine; create_database_engine()"`
+- Verificar migraciones: `alembic current`
+
+**Redis errors:**
+- El sistema funciona sin Redis (degradado)
+- Verificar conexión: `redis-cli ping`
+
+## 🤝 Contribución
+
+### Cómo Contribuir
+
+1. **Fork el proyecto** en GitHub
+2. **Crear una rama** para tu feature:
+   ```bash
+   git checkout -b feature/nueva-funcionalidad
+   ```
+3. **Hacer cambios** siguiendo las buenas prácticas:
+   - Escribir tests para nuevas funcionalidades
+   - Mantener cobertura de código
+   - Seguir convenciones de código (PEP 8)
+   - Documentar funciones públicas
+4. **Commit con mensajes claros**:
+   ```bash
+   git commit -m 'feat: agregar nueva funcionalidad X'
+   ```
+5. **Push a tu fork**:
+   ```bash
+   git push origin feature/nueva-funcionalidad
+   ```
+6. **Abrir Pull Request** en GitHub con descripción clara
+
+### Convenciones de Código
+
+- **Type hints**: Usar en todas las funciones
+- **Docstrings**: Documentar clases y funciones públicas
+- **Tests**: Escribir tests unitarios e integración
+- **Nombres**: Usar nombres descriptivos en inglés
+- **Imports**: Organizar imports (stdlib, third-party, local)
+
+### Estructura de Commits
+
+Usar formato Conventional Commits:
+- `feat:` Nueva funcionalidad
+- `fix:` Corrección de bug
+- `docs:` Cambios en documentación
+- `test:` Agregar o modificar tests
+- `refactor:` Refactorización de código
+- `chore:` Tareas de mantenimiento
+
+### Proceso de Revisión
+
+- Todos los PRs requieren al menos una aprobación
+- Los tests deben pasar antes de merge
+- El código debe seguir las convenciones establecidas
+- Se puede solicitar cambios antes de aprobar
+
+## 📖 Recursos Adicionales
+
+- **FastAPI Docs**: https://fastapi.tiangolo.com/
+- **SQLAlchemy Docs**: https://docs.sqlalchemy.org/
+- **Pydantic v2**: https://docs.pydantic.dev/
+- **Alembic**: https://alembic.sqlalchemy.org/
+
+---
+
+Para más información sobre el proyecto, ver [README.md](README.md)
