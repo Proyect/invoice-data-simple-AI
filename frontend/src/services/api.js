@@ -21,9 +21,9 @@ export const documentAPI = {
   uploadSimple: (file, documentType = 'factura') => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('document_type', documentType);
+    // document_type va como query parameter, no en FormData
     
-    return api.post('/api/v1/upload', formData, {
+    return api.post(`/api/v1/upload?document_type=${encodeURIComponent(documentType)}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -34,11 +34,15 @@ export const documentAPI = {
   uploadFlexible: (file, documentType = 'factura', ocrMethod = 'auto', extractionMethod = 'auto') => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('document_type', documentType);
-    formData.append('ocr_method', ocrMethod);
-    formData.append('extraction_method', extractionMethod);
+    // Los parámetros van como query parameters, no en FormData
     
-    return api.post('/api/v1/upload-flexible', formData, {
+    const params = new URLSearchParams({
+      document_type: documentType,
+      ocr_method: ocrMethod,
+      extraction_method: extractionMethod
+    });
+    
+    return api.post(`/api/v1/upload-flexible?${params.toString()}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
