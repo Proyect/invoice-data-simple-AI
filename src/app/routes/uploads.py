@@ -14,22 +14,25 @@ from ..core.database import get_db
 from ..models.document import Document
 from ..schemas.document import DocumentResponse
 from ..services.basic_extraction_service import BasicExtractionService
-from ..services.optimal_ocr_service import OptimalOCRService
-from ..services.intelligent_extraction_service import IntelligentExtractionService
+from ..core.dependencies import (
+    get_optimal_ocr_service,
+    get_intelligent_extraction_service,
+    get_afip_invoice_extraction_service,
+    get_basic_extraction_service
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# Servicios
-basic_extraction = BasicExtractionService()
-ocr_service = OptimalOCRService()
-intelligent_extraction = IntelligentExtractionService()
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_simple(
     file: UploadFile = File(...),
     document_type: str = Form("factura"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    basic_extraction: BasicExtractionService = Depends(get_basic_extraction_service),
+    ocr_service: OptimalOCRService = Depends(get_optimal_ocr_service),
+    afip_service = Depends(get_afip_invoice_extraction_service),
+    intelligent_extraction: IntelligentExtractionService = Depends(get_intelligent_extraction_service)
 ):
     """
     Upload simple de documento
@@ -71,8 +74,6 @@ async def upload_simple(
             if extracted_data.get('tipo_documento') == 'factura_afip':
                 logger.info("Factura AFIP detectada, aplicando OCR especializado")
                 try:
-                    from ..services.afip_invoice_extraction_service import AFIPInvoiceExtractionService
-                    afip_service = AFIPInvoiceExtractionService()
                     enhanced_data = afip_service.extract_afip_invoice_data(raw_text, file_path)
                     if enhanced_data:
                         extracted_data = enhanced_data
@@ -139,7 +140,10 @@ async def upload_flexible(
     document_type: str = Form("factura"),
     ocr_method: str = Form("auto"),
     extraction_method: str = Form("auto"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    ocr_service = Depends(get_optimal_ocr_service),
+    intelligent_extraction = Depends(get_intelligent_extraction_service),
+    basic_extraction: BasicExtractionService = Depends(get_basic_extraction_service)
 ):
     """
     Upload flexible de documento con opciones de procesamiento
@@ -176,11 +180,27 @@ async def upload_flexible(
             
             # Extraer datos según método seleccionado
             if extraction_method == "auto":
-                extracted_data = intelligent_extraction.extract_document_data(raw_text, document_type)
+                # Usar extracción inteligente asíncrona
+                extraction_result = await intelligent_extraction.extract_intelligent_data(raw_text, file_path)
+                extracted_data = {
+                    'document_type': extraction_result.document_type.value if hasattr(extraction_result.document_type, 'value') else str(extraction_result.document_type),
+                    'confidence': extraction_result.confidence,
+                    'entities': extraction_result.entities,
+                    'structured_data': extraction_result.structured_data,
+                    'metadata': extraction_result.metadata
+                }
             elif extraction_method == "basic":
                 extracted_data = basic_extraction.extract_data(raw_text, document_type)
             else:
-                extracted_data = intelligent_extraction.extract_document_data(raw_text, document_type)
+                # Usar extracción inteligente asíncrona
+                extraction_result = await intelligent_extraction.extract_intelligent_data(raw_text, file_path)
+                extracted_data = {
+                    'document_type': extraction_result.document_type.value if hasattr(extraction_result.document_type, 'value') else str(extraction_result.document_type),
+                    'confidence': extraction_result.confidence,
+                    'entities': extraction_result.entities,
+                    'structured_data': extraction_result.structured_data,
+                    'metadata': extraction_result.metadata
+                }
             
             # Crear registro en base de datos
             document = Document(

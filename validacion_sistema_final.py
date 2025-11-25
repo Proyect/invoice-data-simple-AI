@@ -51,7 +51,7 @@ def verificar_archivos_sistema():
         "start_production.py",
         "test_production_system.py",
         "requirements.txt",
-        "README_PRODUCTION.md"
+        "README.md"
     ]
     
     archivos_ok = 0
@@ -356,6 +356,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

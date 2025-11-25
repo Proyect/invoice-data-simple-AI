@@ -395,8 +395,7 @@ class SystemVerifier:
             "config_minimo.env",
             "setup_optimo_5min.sh",
             "deploy_automatico.sh",
-            "guia_deploy_completa.md",
-            "analisis_servicios_optimo.md"
+            "README.md"
         ]
         
         for file_path in new_files:
@@ -535,6 +534,8 @@ if __name__ == "__main__":
         print("\n🔧 SISTEMA NECESITA CORRECCIONES")
     
     sys.exit(0 if success else 1)
+
+
 
 
 
