@@ -6,7 +6,7 @@ Tests unitarios para los modelos del sistema.
 """
 import pytest
 from datetime import datetime
-from src.app.models.document_unified import Document, DocumentType, DocumentStatus, OCRProvider
+from src.app.models.document_enhanced import Document, DocumentType, DocumentStatus, OCRProvider
 from src.app.models.base import BaseModel, TimestampMixin, SoftDeleteMixin, MetadataMixin
 
 

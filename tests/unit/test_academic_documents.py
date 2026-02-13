@@ -8,7 +8,8 @@ Prueba la extracción de datos de títulos y certificados.
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+import pytest
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from app.services.academic_document_extraction_service import AcademicDocumentExtractionService
 

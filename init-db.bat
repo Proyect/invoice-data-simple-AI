@@ -26,6 +26,6 @@ echo ========================================
 echo Migracion completada exitosamente!
 echo ========================================
 echo.
-echo Puedes iniciar la aplicacion con: python start.py
+echo Puedes iniciar la aplicacion con: python main.py
 pause
 

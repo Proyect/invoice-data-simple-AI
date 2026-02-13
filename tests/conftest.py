@@ -221,7 +221,7 @@ def sample_document_data():
 @pytest.fixture
 def sample_document(db_session: Session, sample_document_data):
     """Documento de prueba persistido en la base de datos"""
-    from src.app.models.document_unified import Document
+    from src.app.models.document_enhanced import Document
     
     document = Document(**sample_document_data)
     db_session.add(document)

@@ -12,7 +12,7 @@ from ...schemas.document import ExtractedDataResponse
 from ...services.async_processing_service import AsyncProcessingService
 from ...services.optimal_ocr_service import OptimalOCRService
 from ...services.intelligent_extraction_service import IntelligentExtractionService
-from ...core.config import settings
+from ...core.environment import get_settings
 import shutil
 from pathlib import Path
 import os
@@ -57,7 +57,7 @@ async def upload_document(
             )
         
         # Crear directorio si no existe
-        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir = Path(get_settings().upload_dir)
         upload_dir.mkdir(exist_ok=True, parents=True)
         
         # Guardar archivo con nombre único para evitar colisiones
@@ -192,7 +192,7 @@ async def upload_document_flexible(
             )
         
         # Crear directorio si no existe
-        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir = Path(get_settings().upload_dir)
         upload_dir.mkdir(exist_ok=True, parents=True)
         
         # Guardar archivo con nombre único

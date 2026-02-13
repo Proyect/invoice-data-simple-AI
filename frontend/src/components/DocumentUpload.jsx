@@ -111,11 +111,19 @@ const DocumentUpload = () => {
     } catch (error) {
       console.error('Upload error:', error);
       setProcessingStatus('error');
-      setProcessingStep('Error en el procesamiento');
-      message.error(error.response?.data?.detail || 'Error procesando documento');
+      
+      // Usar mensaje mejorado del interceptor si está disponible
+      const errorMessage = error.userMessage || 
+                          error.response?.data?.error?.message ||
+                          error.response?.data?.detail || 
+                          'Error procesando documento. Por favor, verifica el archivo e intenta nuevamente.';
+      
+      setProcessingStep(`Error: ${errorMessage}`);
+      message.error(errorMessage, 5); // Mostrar por 5 segundos
       onError(error);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 

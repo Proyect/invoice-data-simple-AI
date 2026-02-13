@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .base_repository import BaseRepository
 from ..models.document import Document  # Usar el modelo básico de document.py
-from ..services.cache_optimized import cached, cache_invalidate
+from ..services.cache import cached, cache_invalidate, get_cache_service
 
 logger = logging.getLogger(__name__)
 

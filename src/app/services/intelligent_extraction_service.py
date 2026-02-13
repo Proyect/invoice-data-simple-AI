@@ -7,7 +7,7 @@ import openai
 import re
 import spacy
 import json
-from ..core.config import settings
+from ..core.environment import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,12 @@ class IntelligentExtractionService:
     def __init__(self):
         # Configurar OpenAI
         self.openai_client = None
-        if settings.OPENAI_API_KEY:
-            openai.api_key = settings.OPENAI_API_KEY
-            self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        env_settings = get_settings()
+        llm_config = env_settings.llm
+        
+        if llm_config and llm_config.openai_api_key:
+            openai.api_key = llm_config.openai_api_key
+            self.openai_client = openai.OpenAI(api_key=llm_config.openai_api_key)
             logger.info("OpenAI client inicializado")
         else:
             logger.warning("OpenAI API key no configurada")
@@ -210,15 +213,20 @@ class IntelligentExtractionService:
             prompt = self._create_extraction_prompt(text, doc_type)
             
             # Para facturas, usar más tokens y temperatura más baja para mayor precisión
+            env_settings = get_settings()
+            llm_config = env_settings.llm
+            if not llm_config:
+                raise ValueError("LLM configuration not available")
+            
             if doc_type == DocumentType.FACTURA:
-                max_tokens = min(2000, settings.OPENAI_MAX_TOKENS * 2)  # Más tokens para facturas
+                max_tokens = min(2000, llm_config.openai_max_tokens * 2)  # Más tokens para facturas
                 temperature = 0.0  # Temperatura 0 para máxima precisión en facturas
             else:
-                max_tokens = settings.OPENAI_MAX_TOKENS
-                temperature = settings.OPENAI_TEMPERATURE
+                max_tokens = llm_config.openai_max_tokens
+                temperature = llm_config.openai_temperature
             
             response = await self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
+                model=llm_config.openai_model,
                 messages=[
                     {"role": "system", "content": "Eres un experto en extracción de datos de documentos argentinos, especialmente facturas. Responde SOLO en formato JSON válido, sin texto adicional. Si un campo no existe, usa null."},
                     {"role": "user", "content": prompt}

@@ -39,6 +39,7 @@ pydantic[email]==2.10.6
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 aiofiles==23.2.1
+requests==2.31.0
 # pandas is not required for tests; skip heavy build on Python 3.13
 # pandas==2.1.4
 

@@ -41,7 +41,7 @@ from .async_processing_service import AsyncProcessingService
 
 # Importar dependencias
 from ..core.database import get_db
-from ..core.config import settings
+from ..core.environment import get_settings
 
 class DocumentServiceEnhanced:
     """Servicio mejorado para gestión de documentos con compatibilidad legacy"""

@@ -9,7 +9,8 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
 from ..core.database import Base
-from ..core.config import settings
+# Note: settings no se usa directamente en este modelo
+# from ..core.environment import get_settings
 import enum
 from datetime import datetime
 from typing import Dict, Any, Optional, List

@@ -16,9 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from src.app.core.environment import get_settings
 from src.app.core.database import init_database, create_database_engine, create_session_factory
-from src.app.models.document_unified import Document, DocumentType, DocumentStatus
+from src.app.models.document_enhanced import Document, DocumentType, DocumentStatus
 from src.app.repositories.document_repository import DocumentRepository
-from src.app.services.cache_optimized import cache_service
+from src.app.services.cache import get_cache_service
+cache_service = get_cache_service()
 
 # Configurar logging
 logging.basicConfig(
@@ -324,6 +325,13 @@ def main():
 
 if __name__ == "__main__":
     exit(main())
+
+
+
+
+
+
+
 
 
 

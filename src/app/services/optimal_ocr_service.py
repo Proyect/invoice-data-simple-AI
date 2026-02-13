@@ -10,7 +10,7 @@ import boto3
 import cv2
 import numpy as np
 import os
-from ..core.config import settings
+from ..core.environment import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +34,15 @@ class OptimalOCRService:
     """
     
     def __init__(self):
+        settings = get_settings()
+        
         # Inicializar clientes
         self.google_client = None
         self.aws_textract = None
         
         # Configuraciones
-        self.daily_google_limit = settings.GOOGLE_VISION_DAILY_LIMIT
-        self.daily_aws_limit = settings.AWS_TEXTRACT_DAILY_LIMIT
+        self.daily_google_limit = settings.ocr.google_vision_daily_limit
+        self.daily_aws_limit = settings.ocr.aws_textract_daily_limit
         self.google_used_today = 0
         self.aws_used_today = 0
         
@@ -56,20 +58,21 @@ class OptimalOCRService:
     
     def _initialize_clients(self):
         """Inicializa clientes de cloud OCR si están configurados"""
+        settings = get_settings()
         try:
-            if settings.GOOGLE_APPLICATION_CREDENTIALS and os.path.exists(settings.GOOGLE_APPLICATION_CREDENTIALS):
+            if settings.ocr.google_application_credentials and os.path.exists(settings.ocr.google_application_credentials):
                 self.google_client = vision.ImageAnnotatorClient()
                 logger.info("Google Vision API inicializado")
         except Exception as e:
             logger.warning(f"No se pudo inicializar Google Vision API: {e}")
         
         try:
-            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            if settings.ocr.aws_access_key_id and settings.ocr.aws_secret_access_key:
                 self.aws_textract = boto3.client(
                     'textract',
-                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                    region_name=settings.AWS_REGION
+                    aws_access_key_id=settings.ocr.aws_access_key_id,
+                    aws_secret_access_key=settings.ocr.aws_secret_access_key,
+                    region_name=settings.ocr.aws_region
                 )
                 logger.info("AWS Textract inicializado")
         except Exception as e:

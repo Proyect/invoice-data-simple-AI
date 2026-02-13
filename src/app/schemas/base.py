@@ -55,9 +55,16 @@ class PaginationSchema(BaseSchema):
     def calculate_pagination(self):
         """Calcular campos de paginación"""
         if self.total > 0:
-            self.total_pages = (self.total + self.size - 1) // self.size
-            self.has_next = self.page < self.total_pages
-            self.has_prev = self.page > 1
+            # Calcular total_pages sin asignar directamente para evitar recursión
+            calculated_total_pages = (self.total + self.size - 1) // self.size
+            # Usar object.__setattr__ para evitar validación de Pydantic
+            object.__setattr__(self, 'total_pages', calculated_total_pages)
+            object.__setattr__(self, 'has_next', self.page < calculated_total_pages)
+            object.__setattr__(self, 'has_prev', self.page > 1)
+        else:
+            object.__setattr__(self, 'total_pages', 0)
+            object.__setattr__(self, 'has_next', False)
+            object.__setattr__(self, 'has_prev', False)
         return self
 
 

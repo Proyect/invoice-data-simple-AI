@@ -13,7 +13,8 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
-from .config import settings
+# Note: settings no se usa directamente en este archivo
+# from .environment import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,8 @@ def get_academic_document_extraction_service():
 @lru_cache()
 def get_cache_service():
     """Provider para CacheService"""
-    from ..services.cache_service import CacheService
-    return CacheService()
+    from ..services.cache import get_cache_service as _get_cache_service
+    return _get_cache_service()
 
 
 def get_async_processing_service(

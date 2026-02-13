@@ -47,6 +47,7 @@ from .middleware.error_handler import ErrorHandlerMiddleware
 from .middleware.performance import PerformanceMiddleware
 from .middleware.security import SecurityMiddleware
 from .middleware.rate_limiting import RateLimitingMiddleware
+from .middleware.metrics import MetricsMiddleware, get_metrics
 
 # Configurar logging
 setup_logging()
@@ -174,6 +175,7 @@ def create_app(environment: Environment = None) -> FastAPI:
         )
     
     # Middleware personalizado
+    app.add_middleware(MetricsMiddleware)
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(PerformanceMiddleware)
     
@@ -267,6 +269,11 @@ def create_app(environment: Environment = None) -> FastAPI:
                 "daily_ocr_limit": settings.ocr.google_vision_daily_limit,
             }
         }
+    
+    @app.get("/metrics", tags=["System"])
+    async def metrics():
+        """Métricas del sistema"""
+        return get_metrics()
     
     return app
 
