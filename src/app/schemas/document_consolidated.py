@@ -235,17 +235,38 @@ class DocumentReviewRequestSchema(BaseSchema):
 class DocumentBatchOperationRequestSchema(BaseSchema):
     """Schema para operaciones en lote"""
     document_ids: List[int] = Field(..., min_items=1, max_items=100, description="IDs de documentos")
-    operation: str = Field(..., pattern="^(delete|update_status|update_type|add_tags|remove_tags|approve|reject)$", description="Operación a realizar")
+    operation: str = Field(..., description="Operación a realizar")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Parámetros de la operación")
+    
+    @field_validator('operation')
+    @classmethod
+    def validate_operation(cls, v):
+        """Validar tipo de operación"""
+        valid_operations = [
+            'delete', 'update_status', 'update_type', 
+            'add_tags', 'remove_tags', 'approve', 'reject'
+        ]
+        if v not in valid_operations:
+            raise ValueError(f"Operación no válida. Debe ser una de: {valid_operations}")
+        return v
 
 
 class DocumentExportRequestSchema(BaseSchema):
     """Schema para exportar documentos"""
     document_ids: Optional[List[int]] = Field(None, description="IDs específicos de documentos")
     filters: Optional[DocumentSearchRequestSchema] = Field(None, description="Filtros de búsqueda")
-    format: str = Field("json", pattern="^(json|csv|xlsx|pdf)$", description="Formato de exportación")
+    format: str = Field("json", description="Formato de exportación")
     include_extracted_data: bool = Field(True, description="Incluir datos extraídos")
     include_raw_text: bool = Field(False, description="Incluir texto raw")
+    
+    @field_validator('format')
+    @classmethod
+    def validate_format(cls, v):
+        """Validar formato de exportación"""
+        valid_formats = ['json', 'csv', 'xlsx', 'pdf']
+        if v not in valid_formats:
+            raise ValueError(f"Formato no válido. Debe ser uno de: {valid_formats}")
+        return v
 
 
 # Schemas de respuesta específicos

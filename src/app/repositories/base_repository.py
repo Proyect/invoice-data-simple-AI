@@ -13,7 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import and_, or_, func, desc, asc
 
 from ..core.database import Base
-from ..services.cache_optimized import cache_service, cached, cache_invalidate
+from ..services.cache import get_cache_service, cached, cache_invalidate
+cache_service = get_cache_service()
 
 logger = logging.getLogger(__name__)
 

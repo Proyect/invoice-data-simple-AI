@@ -70,21 +70,21 @@ class BasicExtractionService:
                 # Esto se implementaría en el endpoint de upload
                 return self.afip_service.extract_afip_invoice_data(text)
             
-        # Extraer datos según el tipo de documento
-        if document_type.lower() in ["factura", "invoice"]:
-            extracted_data = self._extract_invoice_data(text)
-        elif document_type.lower() in ["recibo", "receipt"]:
-            extracted_data = self._extract_receipt_data(text)
-        elif document_type.lower() in ["titulo", "diploma", "licencia"]:
-            extracted_data = self._extract_titulo_data(text)
-        elif document_type.lower() in ["certificado", "certificate"]:
-            extracted_data = self._extract_certificado_data(text)
-        elif document_type.lower() in ["dni", "dni_tarjeta", "dni_libreta"]:
-            extracted_data = self._extract_dni_data(text)
-        elif document_type.lower() in ["pasaporte", "passport"]:
-            extracted_data = self._extract_pasaporte_data(text)
-        else:
-            extracted_data = self._extract_generic_data(text)
+            # Extraer datos según el tipo de documento
+            if document_type.lower() in ["factura", "invoice"]:
+                extracted_data = self._extract_invoice_data(text)
+            elif document_type.lower() in ["recibo", "receipt"]:
+                extracted_data = self._extract_receipt_data(text)
+            elif document_type.lower() in ["titulo", "diploma", "licencia"]:
+                extracted_data = self._extract_titulo_data(text)
+            elif document_type.lower() in ["certificado", "certificate"]:
+                extracted_data = self._extract_certificado_data(text)
+            elif document_type.lower() in ["dni", "dni_tarjeta", "dni_libreta"]:
+                extracted_data = self._extract_dni_data(text)
+            elif document_type.lower() in ["pasaporte", "passport"]:
+                extracted_data = self._extract_pasaporte_data(text)
+            else:
+                extracted_data = self._extract_generic_data(text)
             
             # Aplicar validación universal
             try:

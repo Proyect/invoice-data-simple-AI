@@ -5,7 +5,7 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
-from ..core.config import settings
+from ..core.environment import get_settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,10 +15,16 @@ class JWTHandler:
     """Manejo de tokens JWT"""
     
     def __init__(self):
-        self.secret_key = settings.SECRET_KEY
-        self.algorithm = settings.ALGORITHM
-        self.access_token_expire_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        self.refresh_token_expire_days = settings.REFRESH_TOKEN_EXPIRE_DAYS
+        env_settings = get_settings()
+        security_config = env_settings.security
+        if not security_config:
+            raise ValueError("Security configuration not available")
+        
+        self.secret_key = security_config.secret_key
+        self.algorithm = security_config.algorithm
+        self.access_token_expire_minutes = security_config.access_token_expire_minutes
+        # REFRESH_TOKEN_EXPIRE_DAYS no está en SecurityConfig, usar default
+        self.refresh_token_expire_days = 7  # Default value
     
     def create_access_token(self, data: Dict[str, Any]) -> str:
         """

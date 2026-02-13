@@ -7,7 +7,7 @@ Tests unitarios para los repositories del sistema.
 import pytest
 from unittest.mock import Mock, patch
 from src.app.repositories.document_repository import DocumentRepository
-from src.app.models.document_unified import Document, DocumentType, DocumentStatus
+from src.app.models.document_enhanced import Document, DocumentType, DocumentStatus
 
 
 @pytest.mark.unit

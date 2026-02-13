@@ -4,10 +4,9 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import redis
-from rq import Queue, Worker, Connection
+from rq import Queue, Worker
 from rq.job import Job
 import json
-from ..core.config import settings
 from ..core.environment import get_settings
 from ..core.database import get_db
 from ..models.document import Document
@@ -104,12 +103,13 @@ class AsyncProcessingService:
         
         try:
             # Crear trabajo
+            env_settings = get_settings()
             job = self.queue.enqueue(
                 self._process_document_worker,
                 image_path,
                 document_type,
                 document_id,
-                job_timeout=settings.RQ_WORKER_TIMEOUT
+                job_timeout=env_settings.rq_worker_timeout
             )
             
             logger.info(f"Trabajo creado: {job.id}")

@@ -7,7 +7,8 @@ Tests unitarios para el sistema de cache optimizado.
 import pytest
 import asyncio
 from datetime import datetime
-from src.app.services.cache_optimized import CacheService, cached, cache_invalidate
+from src.app.services.cache import get_cache_service, cached, cache_invalidate
+CacheService = get_cache_service().__class__  # Para compatibilidad con tests
 
 
 class TestCacheService:
@@ -16,6 +17,7 @@ class TestCacheService:
     @pytest.fixture
     def cache_service(self, mock_redis):
         """Cache service con Redis mock"""
+        from src.app.services.cache import CacheService
         service = CacheService()
         service.redis_client = mock_redis
         service.memory_cache = {}
@@ -301,6 +303,13 @@ class TestCacheIntegration:
             
             # Limpiar
             document_repository.delete(document.id)
+
+
+
+
+
+
+
 
 
 

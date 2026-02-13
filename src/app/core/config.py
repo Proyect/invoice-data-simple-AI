@@ -1,81 +1,197 @@
-from pydantic_settings import BaseSettings
+"""
+Wrapper de compatibilidad para config.py legacy
+DEPRECATED: Usar environment.py en su lugar
+
+Este archivo mantiene compatibilidad con código legacy mientras
+se migra a environment.py. Se eliminará en versión 3.0.0.
+"""
+import warnings
+from typing import TYPE_CHECKING
 from pathlib import Path
-import os
 
-class Settings(BaseSettings):
-    APP_NAME: str = "Document Extractor API - Optimized"
-    DEBUG: bool = True
-    HOST: str = "0.0.0.0"
-    PORT: int = 8005
-    
-    # Base de datos - PostgreSQL por defecto, SQLite como fallback
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/document_extractor"
-    DATABASE_URL_TEST: str = "postgresql://postgres:postgres@localhost:5432/document_extractor_test"
-    DATABASE_URL_FALLBACK: str = "sqlite:///./data/documents.db"
-    
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379"
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-    
-    # Directorios
-    UPLOAD_DIR: str = "uploads"
-    OUTPUT_DIR: str = "outputs"
-    
-    # Tesseract
-    TESSERACT_CMD: str = ""
-    
-    # Configuración de base de datos
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 30
-    DB_POOL_PRE_PING: bool = True
-    DB_POOL_RECYCLE: int = 3600
-    
-    # Configuración OCR
-    GOOGLE_VISION_DAILY_LIMIT: int = 200
-    AWS_TEXTRACT_DAILY_LIMIT: int = 100
-    TESSERACT_CONFIDENCE_THRESHOLD: float = 0.7
-    
-    # Configuración LLM
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
-    OPENAI_MAX_TOKENS: int = 1000
-    OPENAI_TEMPERATURE: float = 0
-    
-    # Configuración AWS
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
-    AWS_REGION: str = "us-east-1"
-    
-    # Configuración Google Cloud
-    GOOGLE_APPLICATION_CREDENTIALS: str = ""
-    
-    # Procesamiento asíncrono
-    RQ_WORKER_TIMEOUT: int = 600  # 10 minutos
-    RQ_QUEUE_NAME: str = "document_processing"
-    
-    # Configuración de autenticación
-    SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
-    # Configuración de rate limiting
-    RATE_LIMIT_PER_MINUTE: int = 60
-    RATE_LIMIT_BURST: int = 10
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+if TYPE_CHECKING:
+    from .environment import AppConfig
 
-# Crear directorios necesarios
+from .environment import get_settings
+
+# Obtener settings una vez
+_settings = get_settings()
+
+class Settings:
+    """
+    Wrapper de compatibilidad para config.py legacy
+    DEPRECATED: Usar get_settings() de environment.py
+    """
+    
+    def __init__(self):
+        warnings.warn(
+            "config.Settings está deprecado. Usa environment.get_settings()",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        self._settings = _settings
+    
+    # Mapeo de propiedades legacy a nuevas
+    @property
+    def APP_NAME(self) -> str:
+        return self._settings.name
+    
+    @property
+    def DEBUG(self) -> bool:
+        return self._settings.debug
+    
+    @property
+    def HOST(self) -> str:
+        return self._settings.host
+    
+    @property
+    def PORT(self) -> int:
+        return self._settings.port
+    
+    @property
+    def DATABASE_URL(self) -> str:
+        return self._settings.database.url
+    
+    @property
+    def DATABASE_URL_TEST(self) -> str:
+        return self._settings.database.url_test
+    
+    @property
+    def DATABASE_URL_FALLBACK(self) -> str:
+        return self._settings.database.url_fallback
+    
+    @property
+    def REDIS_HOST(self) -> str:
+        return self._settings.redis.host
+    
+    @property
+    def REDIS_PORT(self) -> int:
+        return self._settings.redis.port
+    
+    @property
+    def REDIS_DB(self) -> int:
+        return self._settings.redis.db
+    
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self._settings.redis.host}:{self._settings.redis.port}/{self._settings.redis.db}"
+    
+    @property
+    def UPLOAD_DIR(self) -> str:
+        return self._settings.upload_dir
+    
+    @property
+    def OUTPUT_DIR(self) -> str:
+        return self._settings.output_dir
+    
+    @property
+    def TESSERACT_CMD(self) -> str:
+        return self._settings.ocr.tesseract_cmd
+    
+    @property
+    def GOOGLE_VISION_DAILY_LIMIT(self) -> int:
+        return self._settings.ocr.google_vision_daily_limit
+    
+    @property
+    def AWS_TEXTRACT_DAILY_LIMIT(self) -> int:
+        return self._settings.ocr.aws_textract_daily_limit
+    
+    @property
+    def TESSERACT_CONFIDENCE_THRESHOLD(self) -> float:
+        return self._settings.ocr.confidence_threshold
+    
+    @property
+    def OPENAI_API_KEY(self) -> str:
+        return self._settings.llm.openai_api_key or ""
+    
+    @property
+    def OPENAI_MODEL(self) -> str:
+        return self._settings.llm.openai_model
+    
+    @property
+    def OPENAI_MAX_TOKENS(self) -> int:
+        return self._settings.llm.openai_max_tokens
+    
+    @property
+    def OPENAI_TEMPERATURE(self) -> float:
+        return self._settings.llm.openai_temperature
+    
+    @property
+    def AWS_ACCESS_KEY_ID(self) -> str:
+        return self._settings.ocr.aws_access_key_id or ""
+    
+    @property
+    def AWS_SECRET_ACCESS_KEY(self) -> str:
+        return self._settings.ocr.aws_secret_access_key or ""
+    
+    @property
+    def AWS_REGION(self) -> str:
+        return self._settings.ocr.aws_region
+    
+    @property
+    def GOOGLE_APPLICATION_CREDENTIALS(self) -> str:
+        return self._settings.ocr.google_application_credentials or ""
+    
+    @property
+    def RQ_WORKER_TIMEOUT(self) -> int:
+        return self._settings.rq_worker_timeout
+    
+    @property
+    def RQ_QUEUE_NAME(self) -> str:
+        return self._settings.rq_queue_name
+    
+    @property
+    def SECRET_KEY(self) -> str:
+        return self._settings.security.secret_key
+    
+    @property
+    def ALGORITHM(self) -> str:
+        return self._settings.security.algorithm
+    
+    @property
+    def ACCESS_TOKEN_EXPIRE_MINUTES(self) -> int:
+        return self._settings.security.access_token_expire_minutes
+    
+    @property
+    def REFRESH_TOKEN_EXPIRE_DAYS(self) -> int:
+        return getattr(self._settings.security, 'refresh_token_expire_days', 7)
+    
+    @property
+    def RATE_LIMIT_PER_MINUTE(self) -> int:
+        return self._settings.security.rate_limit_per_minute
+    
+    @property
+    def RATE_LIMIT_BURST(self) -> int:
+        return self._settings.security.rate_limit_burst
+    
+    @property
+    def DB_POOL_SIZE(self) -> int:
+        return self._settings.database.pool_size
+    
+    @property
+    def DB_MAX_OVERFLOW(self) -> int:
+        return self._settings.database.max_overflow
+    
+    @property
+    def DB_POOL_PRE_PING(self) -> bool:
+        return self._settings.database.pool_pre_ping
+    
+    @property
+    def DB_POOL_RECYCLE(self) -> int:
+        return self._settings.database.pool_recycle
+
+# Instancia singleton para compatibilidad
 settings = Settings()
-Path(settings.UPLOAD_DIR).mkdir(exist_ok=True)
-Path(settings.OUTPUT_DIR).mkdir(exist_ok=True)
+
+# Crear directorios necesarios (mantener funcionalidad)
+Path(_settings.upload_dir).mkdir(exist_ok=True)
+Path(_settings.output_dir).mkdir(exist_ok=True)
 Path("data").mkdir(exist_ok=True)
 
-# Configurar Tesseract si es necesario
-if settings.TESSERACT_CMD:
-    import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
+# Configurar Tesseract si es necesario (mantener funcionalidad)
+if _settings.ocr.tesseract_cmd:
+    try:
+        import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = _settings.ocr.tesseract_cmd
+    except ImportError:
+        pass

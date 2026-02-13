@@ -11,8 +11,9 @@ import {
   Descriptions,
   Progress,
   message,
+  Tooltip,
 } from 'antd';
-import { SearchOutlined, EyeOutlined, ReloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { SearchOutlined, EyeOutlined, ReloadOutlined, FileTextOutlined, SyncOutlined } from '@ant-design/icons';
 import { documentAPI } from '../services/api';
 
 const { Title } = Typography;
@@ -21,6 +22,7 @@ const { Search } = Input;
 const DocumentList = () => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [reprocessingIds, setReprocessingIds] = useState(new Set());
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [analysisModalVisible, setAnalysisModalVisible] = useState(false);
@@ -45,14 +47,18 @@ const DocumentList = () => {
         searchText || null
       );
       
-      setDocuments(response.data.documents);
+      setDocuments(response.data.documents || []);
       setPagination(prev => ({
         ...prev,
         total: response.data.total,
       }));
     } catch (error) {
-      message.error('Error cargando documentos');
-      console.error(error);
+      const errorMessage = error.userMessage || 
+                          error.response?.data?.error?.message ||
+                          error.response?.data?.detail || 
+                          'Error cargando documentos. Por favor, intenta nuevamente.';
+      message.error(errorMessage);
+      console.error('Error loading documents:', error);
     } finally {
       setLoading(false);
     }
@@ -73,11 +79,19 @@ const DocumentList = () => {
 
   const viewDocument = async (record) => {
     try {
+      setLoading(true);
       const response = await documentAPI.getDocument(record.id);
       setSelectedDocument(response.data);
       setModalVisible(true);
     } catch (error) {
-      message.error('Error cargando documento');
+      const errorMessage = error.userMessage || 
+                          error.response?.data?.error?.message ||
+                          error.response?.data?.detail || 
+                          'Error cargando documento. Por favor, intenta nuevamente.';
+      message.error(errorMessage);
+      console.error('Error viewing document:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,6 +102,46 @@ const DocumentList = () => {
       setAnalysisModalVisible(true);
     } catch (error) {
       message.error('Error cargando análisis del documento');
+    }
+  };
+
+  const handleReprocess = async (record) => {
+    try {
+      // Agregar el ID a la lista de documentos en reprocesamiento
+      setReprocessingIds(prev => new Set(prev).add(record.id));
+      message.loading({ content: 'Reprocesando documento...', key: `reprocess-${record.id}`, duration: 0 });
+      
+      const response = await documentAPI.reprocessDocument(record.id);
+      
+      message.success({ 
+        content: 'Documento enviado a reprocesamiento. Los datos se actualizarán automáticamente.', 
+        key: `reprocess-${record.id}`,
+        duration: 4
+      });
+      
+      // Recargar la lista después de un breve delay
+      setTimeout(() => {
+        loadDocuments();
+      }, 2000);
+      
+    } catch (error) {
+      const errorMessage = error.userMessage || 
+                          error.response?.data?.error?.message ||
+                          error.response?.data?.detail || 
+                          'Error al reprocesar documento. Por favor, intenta nuevamente.';
+      message.error({ 
+        content: errorMessage, 
+        key: `reprocess-${record.id}`,
+        duration: 4
+      });
+      console.error('Error reprocessing document:', error);
+    } finally {
+      // Remover el ID de la lista de documentos en reprocesamiento
+      setReprocessingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(record.id);
+        return newSet;
+      });
     }
   };
 
@@ -164,6 +218,15 @@ const DocumentList = () => {
           >
             Ver
           </Button>
+          <Tooltip title="Actualizar datos del documento">
+            <Button
+              type="default"
+              size="small"
+              icon={<SyncOutlined />}
+              onClick={() => handleReprocess(record)}
+              loading={reprocessingIds.has(record.id)}
+            />
+          </Tooltip>
           {record.status === 'processed' || record.status === 'completed' ? (
             <Button
               type="default"

@@ -6,8 +6,8 @@ Sistema robusto de configuración por ambientes con validación.
 """
 from enum import Enum
 from pathlib import Path
-from typing import Optional
-from pydantic import Field, validator
+from typing import Optional, Union, List
+from pydantic import Field, field_validator, FieldValidationInfo, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -35,9 +35,11 @@ class DatabaseConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = 'ignore'
     
-    @validator('url', 'url_test')
-    def validate_database_url(cls, v):
+    @field_validator('url', 'url_test')
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
         if not v:
             raise ValueError("Database URL is required")
         return v
@@ -55,6 +57,7 @@ class RedisConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = 'ignore'
 
 
 class OCRConfig(BaseSettings):
@@ -90,7 +93,7 @@ class SecurityConfig(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
     
     # CORS
-    cors_origins: str = Field(default="*", env="CORS_ORIGINS")
+    cors_origins: Union[str, List[str]] = Field(default="*", env="CORS_ORIGINS")
     cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
     
     # Rate Limiting
@@ -99,14 +102,16 @@ class SecurityConfig(BaseSettings):
     rate_limit_burst: int = Field(default=10, ge=1, env="RATE_LIMIT_BURST")
     
     # Trusted Hosts
-    trusted_hosts: str = Field(default="", env="TRUSTED_HOSTS")
+    trusted_hosts: Union[str, List[str]] = Field(default="", env="TRUSTED_HOSTS")
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = 'ignore'
     
-    @validator('cors_origins', pre=True)
+    @field_validator('cors_origins', mode='before')
+    @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS origins from comma-separated string or JSON array"""
         if isinstance(v, str):
@@ -121,7 +126,8 @@ class SecurityConfig(BaseSettings):
                 return [v.strip()]
         return v if isinstance(v, list) else ["*"]
     
-    @validator('trusted_hosts', pre=True)
+    @field_validator('trusted_hosts', mode='before')
+    @classmethod
     def parse_trusted_hosts(cls, v):
         """Parse trusted hosts from comma-separated string"""
         if isinstance(v, str):
@@ -161,6 +167,7 @@ class AppConfig(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = True
         validate_assignment = True
+        extra = 'ignore'  # Ignorar variables de entorno no definidas
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -168,9 +175,12 @@ class AppConfig(BaseSettings):
         # Leer directamente de variables de entorno del sistema
         import os
         if self.database is None:
+            # Usar valores por defecto si no están en env
+            db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/document_extractor")
+            db_url_test = os.getenv("DATABASE_URL_TEST", "postgresql://postgres:postgres@localhost:5432/document_extractor_test")
             self.database = DatabaseConfig(
-                url=os.getenv("DATABASE_URL", ""),
-                url_test=os.getenv("DATABASE_URL_TEST", ""),
+                url=db_url,
+                url_test=db_url_test,
                 url_fallback=os.getenv("DATABASE_URL_FALLBACK", "sqlite:///./data/documents.db"),
                 pool_size=int(os.getenv("DB_POOL_SIZE", "20")),
                 max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "30")),
@@ -212,7 +222,8 @@ class AppConfig(BaseSettings):
                 trusted_hosts=os.getenv("TRUSTED_HOSTS", "")
             )
     
-    @validator('environment', pre=True)
+    @field_validator('environment', mode='before')
+    @classmethod
     def validate_environment(cls, v):
         if isinstance(v, str):
             try:
@@ -221,11 +232,12 @@ class AppConfig(BaseSettings):
                 raise ValueError(f"Invalid environment: {v}. Must be one of: {list(Environment)}")
         return v
     
-    @validator('debug')
-    def validate_debug_for_production(cls, v, values):
-        if values.get('environment') == Environment.PRODUCTION and v:
+    @model_validator(mode='after')
+    def validate_debug_for_production(self):
+        """Validar que DEBUG no esté activado en producción"""
+        if self.environment == Environment.PRODUCTION and self.debug:
             raise ValueError("DEBUG cannot be True in production environment")
-        return v
+        return self
 
 
 def get_settings() -> AppConfig:

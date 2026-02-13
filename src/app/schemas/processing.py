@@ -49,7 +49,7 @@ class ProcessingJobBase(BaseModel):
     job_type: JobTypeEnum = Field(..., description="Tipo de job")
     priority: int = Field(default=5, ge=1, le=10, description="Prioridad (1=alta, 10=baja)")
     
-    @field_validator('priority')
+    @validator('priority')
     @classmethod
     def validate_priority(cls, v):
         """Validar prioridad"""

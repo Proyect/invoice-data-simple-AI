@@ -9,12 +9,18 @@ y tipos de documento soportados.
 
 import sys
 import os
+import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from app.services.basic_extraction_service import get_basic_extraction_service
-from app.services.intelligent_extraction_service import get_intelligent_extraction_service
+from app.services.intelligent_extraction_service import IntelligentExtractionService
 from app.services.academic_document_extraction_service import get_academic_extraction_service
 from app.services.dni_extraction_service import get_dni_extraction_service
+
+# Función helper para obtener servicio inteligente
+def get_intelligent_extraction_service():
+    """Obtener servicio de extracción inteligente"""
+    return IntelligentExtractionService()
 
 @pytest.mark.integration
 @pytest.mark.slow

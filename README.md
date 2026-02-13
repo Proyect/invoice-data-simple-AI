@@ -206,6 +206,19 @@ python run_tests.py --type unit
 
 # Con cobertura de código
 python run_tests.py --coverage
+
+# O directamente con pytest
+pytest tests/ --cov=src/app --cov-report=html --cov-report=term
+
+# Ejecutar tests por categoría
+pytest tests/unit/          # Tests unitarios
+pytest tests/integration/   # Tests de integración
+pytest tests/e2e/           # Tests end-to-end
+```
+
+**Nota**: Para generar reportes de cobertura, asegúrate de tener `pytest-cov` instalado:
+```bash
+pip install pytest-cov
 ```
 
 ## 🔍 Troubleshooting
@@ -222,8 +235,14 @@ alembic upgrade head
 
 ### Error: "spaCy model not found"
 ```bash
+# Instalar spaCy si no está instalado
+pip install spacy
+
+# Descargar modelo en español
 python -m spacy download es_core_news_sm
 ```
+
+**Nota**: spaCy está incluido en `requirements.txt`, pero el modelo de idioma debe descargarse por separado.
 
 ### Error: "Redis connection failed"
 - El sistema funciona sin Redis, pero sin cache ni procesamiento asíncrono
@@ -298,6 +317,12 @@ Para contribuir al proyecto, consulta la guía completa en [README_DEV.md](READM
 - **Desarrolladores**: Ver [README_DEV.md](README_DEV.md)
 - **Tests**: Ver [tests/README.md](tests/README.md)
 - **Migraciones**: Ver [GUIA-MIGRACIONES.md](GUIA-MIGRACIONES.md)
+- **Documentación Técnica**: Ver [docs/README.md](docs/README.md)
+  - Consolidación de Modelos
+  - Consolidación de Configuración
+  - Migración de Routes Legacy
+  - Actualización de Dependencias
+- **Cambios Recientes**: Ver [CHANGELOG.md](CHANGELOG.md)
 
 ## 📄 Licencia
 

@@ -1,7 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Index, func, JSON, Float, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from ..core.database import Base
-from ..core.config import settings
 
 class Document(Base):
     __tablename__ = "documents"

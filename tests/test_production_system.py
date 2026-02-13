@@ -97,7 +97,7 @@ def test_endpoints_detailed(base_url: str = "http://localhost:8005") -> Dict[str
         ("/api/v2/documents/high-confidence/", "GET", "High confidence documents"),
     ]
     
-        for endpoint, method, description in endpoints:
+    for endpoint, method, description in endpoints:
         try:
             if method == "GET":
                 response = requests.get(f"{base_url}{endpoint}", timeout=15)
