@@ -86,9 +86,13 @@ class LLMConfig(BaseSettings):
     openai_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
 
 
+# Valor por defecto del SECRET_KEY; en producción no debe usarse
+DEFAULT_SECRET_KEY = "your-super-secret-key-change-this-in-production"
+
+
 class SecurityConfig(BaseSettings):
     """Configuración de seguridad"""
-    secret_key: str = Field(default="your-super-secret-key-change-this-in-production", env="SECRET_KEY")
+    secret_key: str = Field(default=DEFAULT_SECRET_KEY, env="SECRET_KEY")
     algorithm: str = Field(default="HS256")
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
     
@@ -206,9 +210,9 @@ class AppConfig(BaseSettings):
             self.llm = LLMConfig()
         if self.security is None:
             # Para desarrollo, permitir secret key por defecto
-            secret_key = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")
+            secret_key = os.getenv("SECRET_KEY", DEFAULT_SECRET_KEY)
             if not secret_key or secret_key == "":
-                secret_key = "your-super-secret-key-change-this-in-production"
+                secret_key = DEFAULT_SECRET_KEY
             
             self.security = SecurityConfig(
                 secret_key=secret_key,
@@ -237,6 +241,21 @@ class AppConfig(BaseSettings):
         """Validar que DEBUG no esté activado en producción"""
         if self.environment == Environment.PRODUCTION and self.debug:
             raise ValueError("DEBUG cannot be True in production environment")
+        return self
+
+    @model_validator(mode='after')
+    def validate_secret_key_in_production(self):
+        """En producción, SECRET_KEY debe estar definido y no ser el valor por defecto"""
+        if self.environment != Environment.PRODUCTION:
+            return self
+        if not self.security:
+            return self
+        sk = self.security.secret_key or ""
+        if not sk.strip() or sk.strip() == DEFAULT_SECRET_KEY:
+            raise ValueError(
+                "SECRET_KEY is required in production and must not be the default value. "
+                "Set SECRET_KEY in your environment (e.g. .env) to a secure random string."
+            )
         return self
 
 

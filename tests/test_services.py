@@ -97,8 +97,11 @@ class TestCacheService:
     @pytest.fixture
     def cache_service(self, mock_redis):
         """Fixture del servicio de cache"""
-        from app.services.cache_service import CacheService
-        return CacheService()
+        from app.services.cache import CacheService
+        service = CacheService()
+        service.redis_client = mock_redis
+        service.memory_cache = {}
+        return service
     
     @pytest.mark.asyncio
     async def test_set_and_get(self, cache_service):

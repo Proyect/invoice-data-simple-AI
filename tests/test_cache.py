@@ -275,7 +275,7 @@ class TestCacheIntegration:
     async def test_cache_with_repository(self, document_repository, mock_cache_service):
         """Test integración de cache con repository"""
         # Mock del cache service en el repository
-        with patch('src.app.repositories.document_repository.cache_service', mock_cache_service):
+        with patch('app.repositories.document_repository.get_cache_service', return_value=mock_cache_service):
             # Crear documento
             document = document_repository.create(
                 filename="cache_test.pdf",

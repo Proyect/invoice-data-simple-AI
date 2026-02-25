@@ -29,7 +29,7 @@ const Dashboard = () => {
       setLoading(true);
       
       // Obtener información del sistema
-      const [healthResponse, infoResponse, documentsResponse] = await Promise.all([
+      const [healthResponse, , documentsResponse] = await Promise.all([
         documentAPI.getHealth(),
         documentAPI.getInfo(),
         documentAPI.getDocuments(0, 1), // Solo para obtener el total
@@ -131,7 +131,11 @@ const Dashboard = () => {
               <a href="/documents">
                 <FileTextOutlined /> Ver Documentos
               </a>
-              <a href="http://localhost:8006/docs" target="_blank" rel="noopener noreferrer">
+              <a
+                href={`${process.env.REACT_APP_API_URL || 'http://localhost:8006'}/docs`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <FileTextOutlined /> API Documentation
               </a>
             </Space>

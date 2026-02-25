@@ -1,11 +1,16 @@
 services:
-  # Aplicación principal
   app:
     build:
       context: .
       dockerfile: Dockerfile.dev
     ports:
       - "8006:8005"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./src:/app/src
       - ./uploads:/app/uploads
@@ -104,7 +109,6 @@ services:
     profiles:
       - dev
 
-  # Frontend React
   frontend:
     build:
       context: ./frontend
@@ -112,7 +116,8 @@ services:
     ports:
       - "3001:80"
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - app-network

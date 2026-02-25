@@ -2,6 +2,10 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
+# Para producción: --build-arg REACT_APP_API_URL= (vacío = mismo origen)
+ARG REACT_APP_API_URL=http://localhost:8006
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+
 COPY package*.json ./
 RUN npm install
 

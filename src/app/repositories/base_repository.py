@@ -177,7 +177,7 @@ class BaseRepository(Generic[T]):
             return self.db.query(self.model).filter(
                 self.model.id == entity_id,
                 getattr(self.model, 'is_deleted', False) == False
-            ).exists()
+            ).first() is not None
         except SQLAlchemyError as e:
             self.logger.error(f"Error checking existence of {self.model.__name__} with ID {entity_id}: {e}")
             raise

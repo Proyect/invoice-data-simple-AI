@@ -27,7 +27,7 @@ class User(Base):
     # Información adicional
     profile_data = Column(Text, nullable=True)  # JSON como texto para flexibilidad
     
-    # Relación con documentos (opcional, para auditoría)
+    # Relación con documentos comentada: dos modelos Document (document.py y document_enhanced) complican back_populates
     # documents = relationship("Document", back_populates="user")
     
     def __repr__(self):

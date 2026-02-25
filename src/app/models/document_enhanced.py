@@ -1,20 +1,23 @@
 """
 Modelo de Documento Mejorado con relaciones y funcionalidades avanzadas
 """
+import os
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Boolean, Float, 
+    Column, Integer, String, Text, DateTime, Boolean, Float,
     ForeignKey, Index, func, JSON, Enum as SQLEnum, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
 from ..core.database import Base
-# Note: settings no se usa directamente en este modelo
-# from ..core.environment import get_settings
 import enum
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import uuid
+
+# Para tests con SQLite: TSVECTOR no existe; usar Text
+_USE_SQLITE = os.environ.get("TEST_SQLITE", "").lower() in ("1", "true", "yes")
+_SEARCH_VECTOR_TYPE = Text() if _USE_SQLITE else TSVECTOR
 
 
 class DocumentType(enum.Enum):
@@ -63,20 +66,19 @@ class Document(Base):
     """Modelo de Documento con funcionalidades avanzadas"""
     __tablename__ = "documents"
 
-    # Identificadores
-    id = Column(Integer, primary_key=True, index=True)
+    # Identificadores (sin index=True en id para no duplicar ix_documents_id con document.py)
+    id = Column(Integer, primary_key=True)
     uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()), index=True)
     
-    # Información del archivo
-    filename = Column(String(255), nullable=False, index=True)
+    # Información del archivo (filename sin index aquí; document.py ya tiene)
+    filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=True)
     mime_type = Column(String(100), nullable=True)
-    file_hash = Column(String(64), nullable=True, index=True)  # SHA-256 para detectar duplicados
-    
-    # Clasificación y estado
-    document_type = Column(SQLEnum(DocumentType), nullable=True, index=True)
+    file_hash = Column(String(64), nullable=True, index=True)
+    # Clasificación y estado (document_type sin index aquí; document.py ya tiene ix_documents_document_type)
+    document_type = Column(SQLEnum(DocumentType), nullable=True)
     status = Column(SQLEnum(DocumentStatus), default=DocumentStatus.UPLOADED, index=True)
     priority = Column(Integer, default=5, nullable=False)  # 1=alta, 5=normal, 10=baja
     
@@ -97,12 +99,12 @@ class Document(Base):
     page_count = Column(Integer, nullable=True)
     word_count = Column(Integer, nullable=True)
     
-    # Relaciones
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
-    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=True, index=True)
+    # Relaciones (sin index en user_id/organization_id; document.py ya los indexa)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=True)
     
-    # Auditoría y timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # Auditoría y timestamps (sin index=True en created_at; document.py ya define índice)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)
     
@@ -111,15 +113,15 @@ class Document(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     review_notes = Column(Text, nullable=True)
     
-    # Búsqueda full-text (PostgreSQL)
-    search_vector = Column(TSVECTOR, nullable=True)
+    # Búsqueda full-text (PostgreSQL); en tests SQLite se usa Text
+    search_vector = Column(_SEARCH_VECTOR_TYPE, nullable=True)
     
     # Soft delete
     is_deleted = Column(Boolean, default=False, index=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     
     # Relaciones ORM
-    user = relationship("User", foreign_keys=[user_id], back_populates="documents")
+    user = relationship("User", foreign_keys=[user_id])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     organization = relationship("Organization", back_populates="documents")
     extractions = relationship("DocumentExtraction", back_populates="document", cascade="all, delete-orphan")
@@ -153,9 +155,8 @@ class Document(Base):
         # Índices para revisión
         Index('ix_documents_reviewed_by_status', 'reviewed_by', 'status'),
         Index('ix_documents_reviewed_at', 'reviewed_at'),
-        
-        # Índice para búsqueda por mime_type
-        Index('ix_documents_mime_type', 'mime_type'),
+        # ix_documents_mime_type ya está en document.py; no duplicar con extend_existing
+        {"extend_existing": True},
     )
     
     @validates('confidence_score', 'quality_score')
@@ -443,7 +444,7 @@ class DocumentVersion(Base):
     change_reason = Column(String(255), nullable=True)
     
     # Relaciones
-    document = relationship("Document", back_populates="versions")
+    document = relationship("app.models.document_enhanced.Document", back_populates="versions")
     creator = relationship("User")
     
     __table_args__ = (
@@ -474,7 +475,7 @@ class DocumentExtraction(Base):
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
     
     # Relaciones
-    document = relationship("Document", back_populates="extractions")
+    document = relationship("app.models.document_enhanced.Document", back_populates="extractions")
     creator = relationship("User")
     
     __table_args__ = (
@@ -496,7 +497,7 @@ class DocumentTag(Base):
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
     
     # Relaciones
-    document = relationship("Document", back_populates="tags")
+    document = relationship("app.models.document_enhanced.Document", back_populates="tags")
     creator = relationship("User")
     
     __table_args__ = (
@@ -538,17 +539,13 @@ class Organization(Base):
     
     # Relaciones con lazy loading optimizado
     documents = relationship(
-        "Document", 
-        back_populates="organization",
-        lazy="dynamic",  # Para evitar cargar todos los documentos
-        cascade="all, delete-orphan"
-    )
-    users = relationship(
-        "User", 
+        "app.models.document_enhanced.Document",
         back_populates="organization",
         lazy="dynamic",
         cascade="all, delete-orphan"
     )
+    # Relación users omitida: User no tiene organization_id. Para listar usuarios de una org
+    # usar documentos: distinct user_id desde Document donde organization_id == org.id
     
     __table_args__ = (
         Index('ix_organizations_active_created', 'is_active', 'created_at'),

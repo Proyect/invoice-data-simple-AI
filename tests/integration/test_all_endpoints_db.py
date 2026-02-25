@@ -7,8 +7,8 @@ import json
 
 BASE_URL = "http://localhost:8002"
 
-def test_endpoint(method, endpoint, expected_status=200, data=None):
-    """Probar un endpoint"""
+def _check_endpoint(method, endpoint, expected_status=200, data=None):
+    """Probar un endpoint (no es test de pytest; se usa desde main())."""
     try:
         if method.upper() == "GET":
             response = requests.get(f"{BASE_URL}{endpoint}")
@@ -55,19 +55,19 @@ def main():
     tests = []
     
     # Test 1: Endpoint raíz
-    tests.append(test_endpoint("GET", "/", 200))
+    tests.append(_check_endpoint("GET", "/", 200))
     
     # Test 2: Endpoint de prueba
-    tests.append(test_endpoint("GET", "/test", 200))
+    tests.append(_check_endpoint("GET", "/test", 200))
     
     # Test 3: Listar documentos
-    tests.append(test_endpoint("GET", "/api/v2/documents/", 200))
+    tests.append(_check_endpoint("GET", "/api/v2/documents/", 200))
     
     # Test 4: Obtener documento específico
-    tests.append(test_endpoint("GET", "/api/v2/documents/1", 200))
+    tests.append(_check_endpoint("GET", "/api/v2/documents/1", 200))
     
     # Test 5: Obtener documento que no existe
-    tests.append(test_endpoint("GET", "/api/v2/documents/999", 200))  # Esperamos 200 pero con error en el contenido
+    tests.append(_check_endpoint("GET", "/api/v2/documents/999", 200))  # Esperamos 200 pero con error en el contenido
     
     # Test 6: Crear documento
     document_data = {
@@ -76,13 +76,13 @@ def main():
         "status": "pending",
         "confidence_score": 0.0
     }
-    tests.append(test_endpoint("POST", "/api/v2/documents/", 200, document_data))
+    tests.append(_check_endpoint("POST", "/api/v2/documents/", 200, document_data))
     
     # Test 7: Listar documentos después de crear
-    tests.append(test_endpoint("GET", "/api/v2/documents/", 200))
+    tests.append(_check_endpoint("GET", "/api/v2/documents/", 200))
     
     # Test 8: Estadísticas
-    tests.append(test_endpoint("GET", "/api/v2/documents/stats/overview", 200))
+    tests.append(_check_endpoint("GET", "/api/v2/documents/stats/overview", 200))
     
     # Resumen
     passed = sum(tests)

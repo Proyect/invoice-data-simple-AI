@@ -1,12 +1,11 @@
 import asyncio
 import logging
+import re
+import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
-import openai
-import re
-import spacy
-import json
+
 from ..core.environment import get_settings
 
 logger = logging.getLogger(__name__)
@@ -40,28 +39,27 @@ class IntelligentExtractionService:
     """
     
     def __init__(self):
-        # Configurar OpenAI
         self.openai_client = None
+        self.nlp = None
         env_settings = get_settings()
-        llm_config = env_settings.llm
-        
-        if llm_config and llm_config.openai_api_key:
-            openai.api_key = llm_config.openai_api_key
-            self.openai_client = openai.OpenAI(api_key=llm_config.openai_api_key)
-            logger.info("OpenAI client inicializado")
+        llm_config = env_settings.llm if env_settings else None
+
+        if llm_config and getattr(llm_config, "openai_api_key", None):
+            try:
+                import openai
+                self.openai_client = openai.OpenAI(api_key=llm_config.openai_api_key)
+                logger.info("OpenAI client inicializado")
+            except Exception as e:
+                logger.debug("OpenAI no disponible: %s", e)
         else:
-            logger.warning("OpenAI API key no configurada")
-        
-        # LangChain no es obligatorio para los tests; evitar importaciones pesadas
-        # Mantener lógica basada en OpenAI SDK oficial
-        
-        # Cargar spaCy (fallback)
+            logger.debug("OpenAI API key no configurada")
+
         try:
+            import spacy
             self.nlp = spacy.load("es_core_news_sm")
             logger.info("spaCy model cargado correctamente")
-        except:
-            self.nlp = None
-            logger.warning("spaCy no disponible, usando solo LLMs")
+        except Exception:
+            logger.debug("spaCy no disponible, usando solo LLMs")
         
         # Patrones de documentos
         self.document_patterns = {

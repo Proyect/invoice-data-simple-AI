@@ -13,7 +13,7 @@ from sqlalchemy import and_, or_, func, desc, asc, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .base_repository import BaseRepository
-from ..models.document import Document  # Usar el modelo básico de document.py
+from ..models.document import Document, DocumentStatusValues
 from ..services.cache import cached, cache_invalidate, get_cache_service
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class DocumentRepository(BaseRepository[Document]):
         super().__init__(Document, db)
     
     @cached(ttl=300, key_prefix="documents_by_type")
-    async def get_by_type(self, document_type: str, skip: int = 0, limit: int = 20) -> List[Document]:
+    def get_by_type(self, document_type: str, skip: int = 0, limit: int = 20) -> List[Document]:
         """Obtener documentos por tipo"""
         try:
             return self.db.query(Document).filter(
@@ -38,7 +38,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_by_status")
-    async def get_by_status(self, status: str, skip: int = 0, limit: int = 20) -> List[Document]:
+    def get_by_status(self, status: str, skip: int = 0, limit: int = 20) -> List[Document]:
         """Obtener documentos por estado"""
         try:
             return self.db.query(Document).filter(
@@ -50,18 +50,18 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_needing_review")
-    async def get_needing_review(self, limit: int = 20) -> List[Document]:
+    def get_needing_review(self, limit: int = 20) -> List[Document]:
         """Obtener documentos que necesitan revisión"""
         try:
             return self.db.query(Document).filter(
                 Document.is_deleted == False,
                 or_(
-                    Document.status == DocumentStatus.REVIEWING.value,
+                    Document.status == DocumentStatusValues.REVIEWING,
                     and_(
                         Document.confidence_score.isnot(None),
                         Document.confidence_score < 0.7
                     ),
-                    Document.status == DocumentStatus.FAILED.value
+                    Document.status == DocumentStatusValues.FAILED
                 )
             ).order_by(asc(Document.priority), asc(Document.created_at)).limit(limit).all()
         except SQLAlchemyError as e:
@@ -69,7 +69,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_by_user")
-    async def get_by_user(self, user_id: int, skip: int = 0, limit: int = 20) -> List[Document]:
+    def get_by_user(self, user_id: int, skip: int = 0, limit: int = 20) -> List[Document]:
         """Obtener documentos por usuario"""
         try:
             return self.db.query(Document).filter(
@@ -81,7 +81,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_by_organization")
-    async def get_by_organization(self, organization_id: int, skip: int = 0, limit: int = 20) -> List[Document]:
+    def get_by_organization(self, organization_id: int, skip: int = 0, limit: int = 20) -> List[Document]:
         """Obtener documentos por organización"""
         try:
             return self.db.query(Document).filter(
@@ -93,7 +93,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_search")
-    async def search_by_text(self, query: str, skip: int = 0, limit: int = 20) -> List[Document]:
+    def search_by_text(self, query: str, skip: int = 0, limit: int = 20) -> List[Document]:
         """Búsqueda por texto en documentos"""
         try:
             search_conditions = or_(
@@ -111,7 +111,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_advanced_search")
-    async def advanced_search(
+    def advanced_search(
         self,
         query: Optional[str] = None,
         document_type: Optional[str] = None,
@@ -195,7 +195,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=600, key_prefix="documents_stats")
-    async def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         """Obtener estadísticas detalladas de documentos"""
         try:
             # Estadísticas básicas
@@ -225,11 +225,21 @@ class DocumentRepository(BaseRepository[Document]):
                 Document.ocr_provider.isnot(None)
             ).group_by(Document.ocr_provider).all()
             
-            # Por mes
-            monthly_stats = self.db.query(
-                func.date_trunc('month', Document.created_at).label('month'),
-                func.count(Document.id).label('count')
-            ).filter(Document.is_deleted == False).group_by('month').order_by('month').all()
+            # Por mes (SQLite no tiene date_trunc; usar strftime)
+            _dialect = self.db.get_bind().dialect.name
+            if _dialect == 'sqlite':
+                month_expr = func.strftime('%Y-%m', Document.created_at).label('month')
+                monthly_stats = self.db.query(
+                    month_expr,
+                    func.count(Document.id).label('count')
+                ).filter(Document.is_deleted == False).group_by(month_expr).order_by(month_expr).all()
+                monthly_list = [(m, c) for m, c in monthly_stats]
+            else:
+                monthly_stats = self.db.query(
+                    func.date_trunc('month', Document.created_at).label('month'),
+                    func.count(Document.id).label('count')
+                ).filter(Document.is_deleted == False).group_by('month').order_by('month').all()
+                monthly_list = [(m.strftime('%Y-%m') if hasattr(m, 'strftime') else m, c) for m, c in monthly_stats]
             
             # Estadísticas de confianza
             confidence_stats = self.db.query(
@@ -259,12 +269,12 @@ class DocumentRepository(BaseRepository[Document]):
             
             return {
                 'total_documents': total,
-                'by_status': {status: count for status, count in by_status},
-                'by_type': {doc_type: count for doc_type, count in by_type},
-                'by_ocr_provider': {provider: count for provider, count in by_ocr_provider},
+                'by_status': {str(s): count for s, count in by_status},
+                'by_type': {str(t): count for t, count in by_type},
+                'by_ocr_provider': {str(p): count for p, count in by_ocr_provider},
                 'by_month': {
-                    month.strftime('%Y-%m'): count 
-                    for month, count in monthly_stats
+                    (m if isinstance(m, str) else m.strftime('%Y-%m')): count
+                    for m, count in monthly_list
                 },
                 'average_confidence': float(confidence_stats.avg_confidence) if confidence_stats.avg_confidence else 0.0,
                 'min_confidence': float(confidence_stats.min_confidence) if confidence_stats.min_confidence else 0.0,
@@ -278,14 +288,14 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cache_invalidate("documents_*")
-    async def mark_processing(self, document_id: int) -> bool:
+    def mark_processing(self, document_id: int) -> bool:
         """Marcar documento como procesando"""
         try:
             document = self.get_by_id(document_id)
             if not document:
                 return False
             
-            document.status = DocumentStatus.PROCESSING.value
+            document.status = DocumentStatusValues.PROCESSING
             self.db.commit()
             
             self.logger.info(f"Marked document {document_id} as processing")
@@ -297,7 +307,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cache_invalidate("documents_*")
-    async def mark_processed(
+    def mark_processed(
         self, 
         document_id: int, 
         confidence_score: float = None,
@@ -310,17 +320,15 @@ class DocumentRepository(BaseRepository[Document]):
             if not document:
                 return False
             
-            document.status = DocumentStatus.PROCESSED.value
+            document.status = DocumentStatusValues.PROCESSED
             document.processed_at = datetime.utcnow()
-            
             if confidence_score is not None:
-                document.confidence_score = confidence_score
-            
+                document.confidence_score = float(confidence_score)
             if extracted_data is not None:
                 document.set_extracted_data(extracted_data)
-            
             if processing_time is not None:
-                document.processing_time_seconds = processing_time
+                document.processing_time_seconds = float(processing_time)
+                document.processing_time = str(processing_time)
             
             self.db.commit()
             
@@ -333,14 +341,14 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cache_invalidate("documents_*")
-    async def mark_failed(self, document_id: int, error_message: str = None) -> bool:
+    def mark_failed(self, document_id: int, error_message: str = None) -> bool:
         """Marcar documento como fallido"""
         try:
             document = self.get_by_id(document_id)
             if not document:
                 return False
             
-            document.status = DocumentStatus.FAILED.value
+            document.status = DocumentStatusValues.FAILED
             if error_message:
                 document.review_notes = error_message
             
@@ -355,14 +363,14 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cache_invalidate("documents_*")
-    async def approve(self, document_id: int, reviewed_by: int, notes: str = None) -> bool:
+    def approve(self, document_id: int, reviewed_by: int, notes: str = None) -> bool:
         """Aprobar documento"""
         try:
             document = self.get_by_id(document_id)
             if not document:
                 return False
             
-            document.status = DocumentStatus.APPROVED.value
+            document.status = DocumentStatusValues.APPROVED
             document.reviewed_by = reviewed_by
             document.reviewed_at = datetime.utcnow()
             
@@ -380,14 +388,14 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cache_invalidate("documents_*")
-    async def reject(self, document_id: int, reviewed_by: int, reason: str) -> bool:
+    def reject(self, document_id: int, reviewed_by: int, reason: str) -> bool:
         """Rechazar documento"""
         try:
             document = self.get_by_id(document_id)
             if not document:
                 return False
             
-            document.status = DocumentStatus.REJECTED.value
+            document.status = DocumentStatusValues.REJECTED
             document.reviewed_by = reviewed_by
             document.reviewed_at = datetime.utcnow()
             document.review_notes = reason
@@ -403,7 +411,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_recent")
-    async def get_recent(self, days: int = 7, limit: int = 20) -> List[Document]:
+    def get_recent(self, days: int = 7, limit: int = 20) -> List[Document]:
         """Obtener documentos recientes"""
         try:
             since_date = datetime.utcnow() - timedelta(days=days)
@@ -418,7 +426,7 @@ class DocumentRepository(BaseRepository[Document]):
             raise
     
     @cached(ttl=300, key_prefix="documents_high_confidence")
-    async def get_high_confidence(self, min_confidence: float = 0.8, limit: int = 20) -> List[Document]:
+    def get_high_confidence(self, min_confidence: float = 0.8, limit: int = 20) -> List[Document]:
         """Obtener documentos con alta confianza"""
         try:
             return self.db.query(Document).filter(

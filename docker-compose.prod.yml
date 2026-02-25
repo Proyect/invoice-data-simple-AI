@@ -1,14 +1,25 @@
 version: '3.8'
 
+# Producción: definir SECRET_KEY y contraseñas reales (no usar defaults)
+# Opción 1: export POSTGRES_PASSWORD=... SECRET_KEY=... y ejecutar
+# Opción 2: crear .env.prod desde env.example y: docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
 services:
-  # Aplicación principal
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       - DEBUG=False
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/document_extractor
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY:-cambiar-en-produccion-clave-segura-32-chars-minimo}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/document_extractor
       - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
       - PORT=8005
@@ -61,14 +72,15 @@ services:
         reservations:
           memory: 128M
 
-  # Worker para procesamiento asíncrono
   worker:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python -m rq worker document_processing --url redis://redis:6379
+    command: rq worker document_processing --url redis://redis:6379
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/document_extractor
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY:-cambiar-en-produccion-clave-segura-32-chars-minimo}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/document_extractor
       - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
     depends_on:
@@ -85,7 +97,24 @@ services:
         reservations:
           memory: 256M
 
-  # Nginx reverse proxy
+  # Frontend (opcional: incluir con profile 'frontend')
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=
+    ports:
+      - "3001:80"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - frontend
+
+  # Nginx reverse proxy (API en :80; con profile frontend usar nginx que sirva SPA + proxy /api)
   nginx:
     image: nginx:alpine
     ports:

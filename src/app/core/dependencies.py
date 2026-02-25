@@ -58,18 +58,17 @@ def get_intelligent_extraction_service():
     return IntelligentExtractionService()
 
 
-@lru_cache()
 def get_afip_invoice_extraction_service(
-    validation_service = Depends(get_afip_validation_service),
-    specialized_ocr = Depends(get_specialized_ocr_service),
-    universal_validation = Depends(get_universal_validation_service)
+    validation_service=Depends(get_afip_validation_service),
+    specialized_ocr=Depends(get_specialized_ocr_service),
+    universal_validation=Depends(get_universal_validation_service),
 ):
-    """Provider para AFIPInvoiceExtractionService con dependencias inyectadas"""
+    """Provider para AFIPInvoiceExtractionService. Sin @lru_cache: Depends() solo tiene efecto en rutas FastAPI."""
     from ..services.afip_invoice_extraction_service import AFIPInvoiceExtractionService
     return AFIPInvoiceExtractionService(
         validation_service=validation_service,
         specialized_ocr=specialized_ocr,
-        universal_validation=universal_validation
+        universal_validation=universal_validation,
     )
 
 
@@ -102,20 +101,19 @@ def get_cache_service():
 
 
 def get_async_processing_service(
-    ocr_service = Depends(get_optimal_ocr_service),
-    extraction_service = Depends(get_intelligent_extraction_service)
+    ocr_service=Depends(get_optimal_ocr_service),
+    extraction_service=Depends(get_intelligent_extraction_service),
 ):
-    """Provider para AsyncProcessingService con dependencias inyectadas"""
+    """Provider para AsyncProcessingService. Sin @lru_cache: usa Depends() en rutas FastAPI."""
     from ..services.async_processing_service import AsyncProcessingService
     return AsyncProcessingService(
         ocr_service=ocr_service,
-        extraction_service=extraction_service
+        extraction_service=extraction_service,
     )
 
 
-@lru_cache()
 def get_document_repository(db: Session = Depends(get_db)):
-    """Provider para DocumentRepository"""
+    """Provider para DocumentRepository. Sin cache: Session es por request."""
     from ..repositories.document_repository import DocumentRepository
     return DocumentRepository(db)
 

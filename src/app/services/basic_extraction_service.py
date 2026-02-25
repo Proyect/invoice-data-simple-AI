@@ -1,18 +1,18 @@
 """
 Servicio de extracción básico usando solo spaCy y regex
-No requiere APIs externas
+No requiere APIs externas. spaCy se carga de forma diferida (opcional).
 """
 import re
-import spacy
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 class BasicExtractionService:
     """Servicio de extracción de datos usando spaCy y regex"""
-    
+
     def __init__(
         self,
         afip_service=None,
@@ -20,17 +20,15 @@ class BasicExtractionService:
     ):
         """
         Inicializar el servicio con dependencias inyectadas.
-        
-        Args:
-            afip_service: Instancia de AFIPInvoiceExtractionService (opcional)
-            universal_validation: Instancia de UniversalValidationService (opcional)
+        spaCy es opcional: si no está instalado o falla el modelo, self.nlp queda None.
         """
+        self.nlp = None
         try:
+            import spacy
             self.nlp = spacy.load("es_core_news_sm")
             logger.info("Modelo de spaCy cargado correctamente")
         except Exception as e:
-            logger.error(f"Error cargando modelo de spaCy: {e}")
-            self.nlp = None
+            logger.debug("spaCy no disponible o modelo no instalado: %s", e)
         
         # Inyectar dependencias o crear instancias si no se proporcionan
         if afip_service is None:

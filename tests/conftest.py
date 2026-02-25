@@ -19,6 +19,22 @@ from fastapi.testclient import TestClient
 # Agregar el directorio src al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+# SQLite en tests: evita TSVECTOR (solo PostgreSQL) en document_enhanced
+os.environ.setdefault("TEST_SQLITE", "1")
+
+# Registrar modelos (User primero; Document document.py; document_enhanced para relaciones)
+def _register_models_for_tests():
+    from app.core.database import Base  # noqa: F401
+    from app.models.user import User  # noqa: F401
+    from app.models.document import Document  # noqa: F401
+    try:
+        from app.models.document_enhanced import DocumentVersion  # noqa: F401
+    except Exception:
+        pass
+
+# Llamar al cargar conftest para que User esté registrado antes de cualquier fixture que cargue la app
+_register_models_for_tests()
+
 # ============================================================================
 # Configuración de Base de Datos para Tests
 # ============================================================================
@@ -26,16 +42,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 @pytest.fixture(scope="session")
 def test_engine():
     """Motor de base de datos para tests (sesión única)"""
-    # Usar SQLite en memoria para tests rápidos
+    _register_models_for_tests()
+    from app.core.database import Base
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
         echo=False
     )
-    
-    # Crear todas las tablas
-    from src.app.models.base import Base
     Base.metadata.create_all(bind=engine)
     
     yield engine
@@ -220,8 +234,8 @@ def sample_document_data():
 
 @pytest.fixture
 def sample_document(db_session: Session, sample_document_data):
-    """Documento de prueba persistido en la base de datos"""
-    from src.app.models.document_enhanced import Document
+    """Documento de prueba persistido en la base de datos (usa document.py para coincidir con repository)"""
+    from app.models.document import Document
     
     document = Document(**sample_document_data)
     db_session.add(document)
@@ -252,7 +266,7 @@ def sample_extracted_data():
 @pytest.fixture
 def client(db_session: Session) -> TestClient:
     """Cliente de prueba para la API"""
-    from src.app.main import app
+    from app.main import app
     
     # Override dependency para usar la sesión de test
     def get_test_db():
@@ -283,12 +297,13 @@ def mock_tesseract():
 
 @pytest.fixture
 def mock_spacy():
-    """Mock de spaCy NLP"""
-    with patch('app.services.basic_extraction_service.nlp') as mock:
-        mock_doc = MagicMock()
-        mock_doc.ents = []
-        mock.return_value = mock_doc
-        yield mock
+    """Mock de spaCy NLP (spacy.load se llama dentro de BasicExtractionService.__init__)."""
+    mock_nlp = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.ents = []
+    mock_nlp.return_value = mock_doc
+    with patch('spacy.load', return_value=mock_nlp):
+        yield mock_nlp
 
 
 @pytest.fixture
@@ -304,13 +319,26 @@ def mock_openai():
 
 @pytest.fixture
 def mock_redis():
-    """Mock de Redis"""
-    with patch('app.services.cache_service.redis_client') as mock:
-        mock.get.return_value = None
-        mock.set.return_value = True
-        mock.delete.return_value = True
-        mock.exists.return_value = False
+    """Mock de Redis para cache (app.services.cache usa get_redis())."""
+    mock = MagicMock()
+    mock.get = MagicMock(return_value=None)
+    mock.set = MagicMock(return_value=True)
+    mock.delete = MagicMock(return_value=True)
+    mock.exists = MagicMock(return_value=False)
+    mock.ping = MagicMock(return_value=True)
+    mock.keys = MagicMock(return_value=[])
+    with patch('app.services.cache.get_redis', return_value=mock):
         yield mock
+
+
+@pytest.fixture
+def mock_cache_service(mock_redis):
+    """CacheService con Redis mock para tests de decoradores/integración."""
+    from app.services.cache import CacheService
+    service = CacheService()
+    service.redis_client = mock_redis
+    service.memory_cache = {}
+    return service
 
 
 @pytest.fixture
@@ -343,7 +371,7 @@ def mock_aws_textract():
 @pytest.fixture
 def document_repository(db_session: Session):
     """Repository de documentos para tests"""
-    from src.app.repositories.document_repository import DocumentRepository
+    from app.repositories.document_repository import DocumentRepository
     return DocumentRepository(db_session)
 
 

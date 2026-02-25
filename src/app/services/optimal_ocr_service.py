@@ -1,16 +1,22 @@
 import asyncio
 import logging
+import os
 from typing import Dict, Any, Optional, List
 from enum import Enum
 from dataclasses import dataclass
-from google.cloud import vision
+
 import pytesseract
 from PIL import Image
-import boto3
-import cv2
 import numpy as np
-import os
 from ..core.environment import get_settings
+
+# Opcionales: import perezoso para no fallar si no están instalados
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+vision = None
+boto3 = None
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +64,21 @@ class OptimalOCRService:
     
     def _initialize_clients(self):
         """Inicializa clientes de cloud OCR si están configurados"""
+        global vision, boto3
         settings = get_settings()
         try:
-            if settings.ocr.google_application_credentials and os.path.exists(settings.ocr.google_application_credentials):
+            if getattr(settings.ocr, "google_application_credentials", None) and os.path.exists(settings.ocr.google_application_credentials):
+                from google.cloud import vision as _vision
+                vision = _vision
                 self.google_client = vision.ImageAnnotatorClient()
                 logger.info("Google Vision API inicializado")
         except Exception as e:
-            logger.warning(f"No se pudo inicializar Google Vision API: {e}")
-        
+            logger.debug("Google Vision API no disponible: %s", e)
+
         try:
-            if settings.ocr.aws_access_key_id and settings.ocr.aws_secret_access_key:
+            if getattr(settings.ocr, "aws_access_key_id", None) and getattr(settings.ocr, "aws_secret_access_key", None):
+                import boto3 as _boto3
+                boto3 = _boto3
                 self.aws_textract = boto3.client(
                     'textract',
                     aws_access_key_id=settings.ocr.aws_access_key_id,

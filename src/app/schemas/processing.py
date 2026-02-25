@@ -2,7 +2,7 @@
 Schemas Pydantic para Procesamiento Asíncrono
 Incluye jobs, steps y tracking de procesamiento
 """
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator, field_validator
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
