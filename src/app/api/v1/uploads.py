@@ -298,3 +298,30 @@ async def upload_document_flexible(
         logger.error(f"Error subiendo archivo {file.filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error subiendo archivo: {str(e)}")
 
+
+@router.get("/upload-flexible/methods")
+async def get_available_methods():
+    """Métodos disponibles para upload flexible (OCR y extracción). Coincide con el frontend."""
+    return {
+        "ocr_methods": [
+            {"id": "auto", "name": "Automático", "description": "Selecciona el mejor método automáticamente"},
+            {"id": "tesseract", "name": "Tesseract", "description": "OCR local con Tesseract"},
+            {"id": "google_vision", "name": "Google Vision", "description": "OCR en la nube con Google Vision API"},
+            {"id": "aws_textract", "name": "AWS Textract", "description": "OCR en la nube con AWS Textract"}
+        ],
+        "extraction_methods": [
+            {"id": "auto", "name": "Automático", "description": "Selecciona el mejor método automáticamente"},
+            {"id": "regex", "name": "Regex", "description": "Extracción con expresiones regulares"},
+            {"id": "spacy", "name": "spaCy", "description": "Extracción con NLP"},
+            {"id": "llm", "name": "LLM", "description": "Extracción con modelo de lenguaje"},
+            {"id": "hybrid", "name": "Híbrido", "description": "Combinación de métodos"}
+        ],
+        "document_types": [
+            {"id": "factura", "name": "Factura", "description": "Factura comercial"},
+            {"id": "recibo", "name": "Recibo", "description": "Recibo de pago"},
+            {"id": "contrato", "name": "Contrato", "description": "Contrato"},
+            {"id": "formulario", "name": "Formulario", "description": "Formulario"},
+            {"id": "otro", "name": "Otro", "description": "Otro tipo de documento"}
+        ]
+    }
+

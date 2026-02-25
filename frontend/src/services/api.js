@@ -125,6 +125,11 @@ export const documentAPI = {
     return api.get('/info');
   },
 
+  // Estadísticas para el dashboard (total, procesados hoy, confianza promedio)
+  getStats: () => {
+    return api.get('/api/v1/documents/stats');
+  },
+
   // Reprocesar documento
   reprocessDocument: (documentId, documentType = null) => {
     const params = {};

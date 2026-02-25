@@ -9,7 +9,7 @@ import logging
 from typing import AsyncGenerator, Optional
 from contextlib import asynccontextmanager
 
-from sqlalchemy import create_engine, MetaData, Index, event
+from sqlalchemy import create_engine, MetaData, Index, event, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool, StaticPool
@@ -169,6 +169,35 @@ def create_redis_client() -> Optional[redis.Redis]:
         return None
 
 
+def _ensure_documents_tag_list_column() -> None:
+    """Añade la columna tag_list a documents si no existe (para BDs ya creadas)."""
+    if engine is None:
+        return
+    try:
+        # Detectar dialecto
+        dialect_name = engine.dialect.name
+        with engine.connect() as conn:
+            if dialect_name == "postgresql":
+                conn.execute(text(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS tag_list JSON"
+                ))
+                conn.commit()
+            elif dialect_name == "sqlite":
+                # SQLite 3.35+ soporta ADD COLUMN ... IF NOT EXISTS
+                try:
+                    conn.execute(text(
+                        "ALTER TABLE documents ADD COLUMN tag_list JSON"
+                    ))
+                    conn.commit()
+                except SQLAlchemyError as e:
+                    if "duplicate column name" in str(e).lower():
+                        pass  # ya existe
+                    else:
+                        raise
+    except Exception as e:
+        logger.warning("No se pudo asegurar columna tag_list (puede existir ya): %s", e)
+
+
 async def init_database() -> None:
     """Inicializar base de datos"""
     try:
@@ -176,9 +205,17 @@ async def init_database() -> None:
         create_database_engine()
         create_session_factory()
         
-        # Crear tablas
+        # Registrar modelos que tienen FK para que create_all cree las tablas en orden
+        # (documents.user_id -> users.id; si users no está en metadata, falla el FK)
+        from ..models.user import User  # noqa: F401
+        from ..models.document import Document  # noqa: F401
+        
+        # Crear tablas (users primero por la FK de documents.user_id)
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Tablas de base de datos creadas/verificadas")
+        
+        # Asegurar columna tag_list en documents (create_all no añade columnas a tablas existentes)
+        _ensure_documents_tag_list_column()
         
         # Inicializar Redis
         create_redis_client()

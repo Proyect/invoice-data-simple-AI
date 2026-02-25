@@ -46,12 +46,7 @@ async def list_documents(
         if document_type or status:
             # Búsqueda con filtros
             if hasattr(repository, 'advanced_search') and callable(getattr(repository, 'advanced_search', None)):
-                documents = await repository.advanced_search(
-                    document_type=document_type,
-                    status=status,
-                    skip=skip,
-                    limit=limit
-                ) if asyncio.iscoroutinefunction(repository.advanced_search) else repository.advanced_search(
+                documents = repository.advanced_search(
                     document_type=document_type,
                     status=status,
                     skip=skip,
@@ -106,7 +101,7 @@ async def get_document(
     """Obtener documento por ID"""
     try:
         repository = DocumentRepository(db)
-        document = await repository.get_by_id(document_id)
+        document = repository.get_by_id(document_id)
         
         if not document:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -129,7 +124,7 @@ async def advanced_search(
     try:
         repository = DocumentRepository(db)
         
-        documents = await repository.advanced_search(
+        documents = repository.advanced_search(
             query=search_request.query,
             document_type=search_request.document_type,
             status=search_request.status,
@@ -148,7 +143,7 @@ async def advanced_search(
         )
         
         # Contar total para paginación
-        total = await repository.count(
+        total = repository.count(
             document_type=search_request.document_type,
             status=search_request.status,
             organization_id=search_request.organization_id,
@@ -180,7 +175,7 @@ async def get_document_stats(db: Session = Depends(get_db)):
     """Obtener estadísticas de documentos"""
     try:
         repository = DocumentRepository(db)
-        stats = await repository.get_stats()
+        stats = repository.get_stats()
         
         return DocumentStatsResponseSchema(**stats)
         
@@ -197,7 +192,7 @@ async def get_documents_needing_review(
     """Obtener documentos que necesitan revisión"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.get_needing_review(limit=limit)
+        documents = repository.get_needing_review(limit=limit)
         
         return [DocumentResponseSchema.model_validate(doc) for doc in documents]
         
@@ -216,7 +211,7 @@ async def get_documents_by_type(
     """Obtener documentos por tipo"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.get_by_type(
+        documents = repository.get_by_type(
             document_type=document_type,
             skip=skip,
             limit=limit
@@ -239,7 +234,7 @@ async def get_documents_by_status(
     """Obtener documentos por estado"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.get_by_status(
+        documents = repository.get_by_status(
             status=status,
             skip=skip,
             limit=limit
@@ -262,7 +257,7 @@ async def search_documents_by_text(
     """Búsqueda de documentos por texto"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.search_by_text(
+        documents = repository.search_by_text(
             query=query,
             skip=skip,
             limit=limit
@@ -284,7 +279,7 @@ async def get_recent_documents(
     """Obtener documentos recientes"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.get_recent(days=days, limit=limit)
+        documents = repository.get_recent(days=days, limit=limit)
         
         return [DocumentResponseSchema.model_validate(doc) for doc in documents]
         
@@ -302,7 +297,7 @@ async def get_high_confidence_documents(
     """Obtener documentos con alta confianza"""
     try:
         repository = DocumentRepository(db)
-        documents = await repository.get_high_confidence(
+        documents = repository.get_high_confidence(
             min_confidence=min_confidence,
             limit=limit
         )

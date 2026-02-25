@@ -622,10 +622,17 @@ const DocumentList = () => {
                         </Descriptions>
                       </Card>
                     )}
+
+                    {/* JSON crudo del análisis (facturas) */}
+                    <Card title="JSON del análisis" style={{ marginBottom: 16 }}>
+                      <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflow: 'auto', fontSize: '12px' }}>
+                        {JSON.stringify(selectedDocumentForAnalysis.extracted_data, null, 2)}
+                      </pre>
+                    </Card>
                   </>
                 ) : (
                   /* Para otros tipos de documentos */
-                  <Card title="Datos Extraídos" style={{ marginBottom: 16 }}>
+                  <Card title="Datos Extraídos (JSON del análisis)" style={{ marginBottom: 16 }}>
                     <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflow: 'auto' }}>
                       {JSON.stringify(selectedDocumentForAnalysis.extracted_data, null, 2)}
                     </pre>

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 
 from ...core.database import get_db
+from ...core.dependencies import get_async_processing_service
 from ...repositories.document_repository import DocumentRepository
 from ...schemas.document_consolidated import (
     DocumentResponseSchema,
@@ -218,6 +219,37 @@ async def get_documents(
         logger.error(f"Error listing documents: {e}")
         raise HTTPException(status_code=500, detail=f"Error listando documentos: {str(e)}")
 
+
+@router.get("/stats")
+async def get_documents_stats(db: Session = Depends(get_db)):
+    """Estadísticas para el dashboard: total, procesados hoy, confianza promedio."""
+    from datetime import datetime, timezone
+    from ...models.document import Document
+
+    repository = DocumentRepository(db)
+    full_stats = repository.get_stats()
+    total_documents = full_stats.get("total_documents", 0)
+    avg_conf = full_stats.get("average_confidence") or 0.0  # 0.0–1.0
+
+    # Procesados hoy (processed_at >= inicio del día UTC)
+    start_today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    processed_today = (
+        db.query(Document)
+        .filter(
+            Document.is_deleted == False,
+            Document.processed_at.isnot(None),
+            Document.processed_at >= start_today,
+        )
+        .count()
+    )
+
+    return {
+        "total_documents": total_documents,
+        "processed_today": processed_today,
+        "average_confidence": round(avg_conf * 100, 1),  # 0–100 para el frontend
+    }
+
+
 @router.get("/{document_id}")
 async def get_document(
     document_id: int,
@@ -348,4 +380,37 @@ async def get_document(
     except Exception as e:
         logger.error(f"Error obteniendo documento {document_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo documento: {str(e)}")
+
+
+@router.post("/{document_id}/reprocess")
+async def reprocess_document(
+    document_id: int,
+    document_type: Optional[str] = Query(None, description="Tipo de documento para reprocesar"),
+    db: Session = Depends(get_db),
+    processing_service=Depends(get_async_processing_service),
+):
+    """Reprocesa un documento existente (coincide con el frontend)."""
+    from pathlib import Path
+
+    repository = DocumentRepository(db)
+    document = repository.get_by_id(document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    file_path = getattr(document, "file_path", None)
+    if not file_path or not Path(file_path).exists():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    doc_type = document_type or getattr(document, "document_type", None) or "factura"
+    if hasattr(doc_type, "value"):
+        doc_type = doc_type.value
+    job_id = await processing_service.process_document_async(
+        str(file_path), doc_type, document_id
+    )
+    return {
+        "message": "Reprocesamiento iniciado",
+        "document_id": document_id,
+        "job_id": job_id,
+        "status_url": f"/api/v1/jobs/{job_id}/status"
+    }
 

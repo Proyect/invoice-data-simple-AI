@@ -27,26 +27,21 @@ const Dashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // Obtener información del sistema
-      const [healthResponse, , documentsResponse] = await Promise.all([
+
+      const [healthResponse, statsResponse] = await Promise.all([
         documentAPI.getHealth(),
-        documentAPI.getInfo(),
-        documentAPI.getDocuments(0, 1), // Solo para obtener el total
+        documentAPI.getStats(),
       ]);
 
       const systemStatus = healthResponse.data.status === 'healthy' ? 'healthy' : 'error';
-      
-      // Calcular estadísticas básicas
-      const totalDocuments = documentsResponse.data.total || 0;
-      
+      const data = statsResponse.data || {};
+
       setStats({
-        totalDocuments,
-        processedToday: Math.floor(totalDocuments * 0.1), // Simulado
-        averageConfidence: 85, // Simulado
+        totalDocuments: data.total_documents ?? 0,
+        processedToday: data.processed_today ?? 0,
+        averageConfidence: data.average_confidence ?? 0,
         systemStatus,
       });
-      
     } catch (err) {
       setError('Error cargando datos del dashboard');
       console.error(err);

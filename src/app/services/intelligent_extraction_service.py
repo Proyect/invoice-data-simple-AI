@@ -161,6 +161,18 @@ class IntelligentExtractionService:
             # Paso 4: Combinar y validar resultados
             combined_data = self._combine_extraction_results(llm_data, spacy_data)
             
+            # Paso 4b: Enriquecer entities con regex (fechas y dinero que spaCy suele no detectar en facturas)
+            text_norm = self._normalize_ocr_numbers(text)
+            regex_data = self._extract_with_regex(text_norm)
+            combined_data['entities'] = self._enrich_entities_from_regex(
+                regex_data, combined_data.get('entities') or {}
+            )
+            combined_data['entities'] = self._filter_entity_noise(combined_data['entities'])
+            
+            # Si structured_data quedó vacío (ej. LLM no disponible) y es factura, rellenar desde regex
+            if doc_type == DocumentType.FACTURA and not (combined_data.get('structured_data') or {}):
+                combined_data['structured_data'] = self._structured_from_regex(regex_data, combined_data['entities'])
+            
             # Paso 5: Validar coherencia
             validated_data = self._validate_data_coherence(combined_data, doc_type)
             
@@ -535,6 +547,74 @@ class IntelligentExtractionService:
             logger.error(f"Error con spaCy: {e}")
             return {'method': 'spacy', 'data': {}, 'confidence': 0.0}
     
+    def _normalize_ocr_numbers(self, text: str) -> str:
+        """Corrige O (letra) por 0 en contextos numéricos/fechas para mejorar regex."""
+        if not text:
+            return text
+        # Secuencias OO...O seguidas de dígito (ej. OOOO2 -> 00002)
+        def _zeros(m):
+            return m.group(1) + '0' * len(m.group(2)) + m.group(3)
+        text = re.sub(r'([\s/:,\-]|^)([Oo]+)(\d)', _zeros, text)
+        # O entre dígitos: 8213O4 -> 821304
+        text = re.sub(r'(\d)[Oo](\d)', r'\g<1>0\g<2>', text)
+        # O al final de número: 7O -> 70
+        text = re.sub(r'(\d)[Oo]\b', r'\g<1>0', text)
+        # O al inicio de número/fecha: O5/O2 -> 05/02
+        text = re.sub(r'\b[Oo](\d)', r'0\g<1>', text)
+        return text
+
+    def _enrich_entities_from_regex(self, regex_data: Dict[str, Any], entities: Dict[str, Any]) -> Dict[str, Any]:
+        """Completa entities con fechas y montos extraídos por regex (spaCy suele fallar en facturas)."""
+        if not entities:
+            entities = {'personas': [], 'organizaciones': [], 'lugares': [], 'fechas': [], 'dinero': []}
+        for key in ('personas', 'organizaciones', 'lugares', 'fechas', 'dinero'):
+            if key not in entities:
+                entities[key] = []
+        fechas = list(entities.get('fechas') or [])
+        dinero = list(entities.get('dinero') or [])
+        for key in ('fecha', 'periodo_facturado_desde', 'periodo_facturado_hasta', 'cae_vencimiento'):
+            val = regex_data.get(key)
+            if val is None:
+                continue
+            if isinstance(val, list):
+                fechas.extend(str(v) for v in val if v)
+            else:
+                fechas.append(str(val))
+        for key in ('monto', 'importe_total'):
+            val = regex_data.get(key)
+            if val is None:
+                continue
+            if isinstance(val, list):
+                dinero.extend(str(v) for v in val if v)
+            else:
+                dinero.append(str(val))
+        if fechas:
+            entities['fechas'] = list(dict.fromkeys(fechas))
+        if dinero:
+            entities['dinero'] = list(dict.fromkeys(dinero))
+        return entities
+
+    def _filter_entity_noise(self, entities: Dict[str, Any]) -> Dict[str, Any]:
+        """Quita etiquetas y palabras que no son entidades reales (Subtotal, CAE, Nombre, etc.)."""
+        blocklist = {
+            'subtotal', 'cae', 'condición', 'boníf', 'nombre', 'agencia', 'razón social', 'razon social',
+            'importe otros tributos', 'domicilio comercial', 'código', 'producto', 'servicio', 'cantidad',
+            'medida', 'precio unit', 'brutos', 'referencia', 'honorarios', 'desarrollo', 'recaudación',
+            'control aduanero', 'comprobante autorizado', 'pág', 'pag', 'salta condición', 'oo o', 'o1',
+        }
+        for key in ('lugares', 'organizaciones', 'personas'):
+            lst = entities.get(key)
+            if not isinstance(lst, list):
+                continue
+            filtered = [
+                x for x in lst
+                if x and len(str(x).strip()) > 2
+                and str(x).strip().lower() not in blocklist
+                and not any(b in str(x).lower() for b in ('subtotal', 'importe', 'cae n', 'condición'))
+            ]
+            entities[key] = filtered
+        return entities
+
     def _combine_extraction_results(self, llm_data: Dict, spacy_data: Dict) -> Dict[str, Any]:
         """Combina resultados de LLM y spaCy"""
         
@@ -776,8 +856,9 @@ class IntelligentExtractionService:
         # Detectar tipo de documento primero
         doc_type = self._detect_document_type(text)
         
-        # Extracción mejorada con regex
-        basic_data = self._extract_with_regex(text)
+        # Normalizar OCR (O -> 0) para que regex encuentre fechas y montos
+        text_norm = self._normalize_ocr_numbers(text)
+        basic_data = self._extract_with_regex(text_norm)
         
         # Intentar usar spaCy si está disponible
         spacy_entities = {}
@@ -791,8 +872,11 @@ class IntelligentExtractionService:
                     'fechas': list(set([ent.text for ent in doc.ents if ent.label_ == 'DATE'])),
                     'dinero': list(set([ent.text for ent in doc.ents if ent.label_ == 'MONEY']))
                 }
-            except:
+            except Exception:
                 pass
+        # Enriquecer entities con fechas y montos de regex (spaCy suele fallar en facturas)
+        spacy_entities = self._enrich_entities_from_regex(basic_data, spacy_entities)
+        spacy_entities = self._filter_entity_noise(spacy_entities)
         
         # Estructurar datos básicos para facturas
         if doc_type == DocumentType.FACTURA:
@@ -847,6 +931,34 @@ class IntelligentExtractionService:
             }
         )
     
+    def _structured_from_regex(self, regex_data: Dict[str, Any], entities: Dict[str, Any]) -> Dict[str, Any]:
+        """Construye structured_data para factura a partir de regex y entities."""
+        def _first(val):
+            if val is None:
+                return None
+            return val[0] if isinstance(val, list) and val else val
+        structured = {
+            'numero_factura': _first(regex_data.get('numero_factura')),
+            'punto_venta': _first(regex_data.get('punto_venta')),
+            'fecha_emision': _first(regex_data.get('fecha')),
+            'cae': _first(regex_data.get('cae')),
+            'cae_vencimiento': _first(regex_data.get('cae_vencimiento')),
+            'emisor': {
+                'cuit': _first(regex_data.get('cuit')),
+                'razon_social': (entities.get('organizaciones') or [None])[0] if entities.get('organizaciones') else None,
+            },
+            'totales': {
+                'subtotal': _first(regex_data.get('monto')),
+                'importe_total': _first(regex_data.get('importe_total')) or _first(regex_data.get('monto')),
+            },
+        }
+        structured = {k: v for k, v in structured.items() if v is not None}
+        if structured.get('emisor'):
+            structured['emisor'] = {k: v for k, v in structured['emisor'].items() if v is not None}
+        if structured.get('totales'):
+            structured['totales'] = {k: v for k, v in structured['totales'].items() if v is not None}
+        return structured
+
     def _extract_with_regex(self, text: str) -> Dict[str, Any]:
         """Extracción mejorada con regex para facturas"""
         
@@ -871,11 +983,16 @@ class IntelligentExtractionService:
             ],
             # Montos (múltiples formatos argentinos)
             'monto': [
+                r'(Importe\s+Total[:\s]*\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?))',
+                r'(Subtotal[:\s]*\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?))',
                 r'(\$\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',  # $1.234,56
                 r'(\$\s?\d+(?:,\d{2})?)',  # $60000,00 o $1234,56
                 r'(USD\s?\d+(?:\.\d{3})*(?:,\d{2})?)',  # USD 1.234,56
                 r'(\d{1,3}(?:\.\d{3})*(?:,\d{2})?\s*(?:pesos|ARS))',  # 1.234,56 pesos
                 r'(\d{5,}(?:,\d{2})?)',  # 60000,00 (sin punto de miles)
+            ],
+            'importe_total': [
+                r'(Importe\s+Total[:\s]*\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?))',
             ],
             # CUITs (múltiples formatos)
             'cuit': [
